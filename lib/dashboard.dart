@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:percent_indicator/percent_indicator.dart'; // Add this
+import 'package:percent_indicator/percent_indicator.dart';
+import 'package:intl/intl.dart'; // IMPORTADONG DAGDAG
 import 'profile_page.dart';
 
 class Dashboard extends StatefulWidget {
@@ -14,7 +15,7 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   double intakeDisplay = 0;
-  double dailyGoal = 2000; // Default goal
+  double dailyGoal = 2000; 
   String gender = "Male";
   int age = 19;
 
@@ -38,24 +39,42 @@ class _DashboardState extends State<Dashboard> {
     } else if (age >= 13 && age <= 15) {
       return (gender == "Male") ? 2400.0 : 2100.0;
     }
-    return 2000.0; // Fallback default
+    return 2000.0; 
+  }
+
+  // --- DAILY RESET LOGIC ---
+  void _checkAndResetDailyIntake(String uid, Map data) async {
+    // 1. Kunin ang petsa ngayon (Format: 2026-04-14)
+    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    
+    // 2. Kunin ang huling petsa na naka-save sa database
+    String lastUpdate = data['last_update']?.toString() ?? "";
+
+    // 3. Kung hindi sila pareho, reset na!
+    if (today != lastUpdate) {
+      await _dbRef.child('users/$uid').update({
+        'intake': 0,
+        'last_update': today,
+      });
+      print("System: Daily Intake Reset Success.");
+    }
   }
 
   void _activateListeners() {
     final String? uid = FirebaseAuth.instance.currentUser?.uid;
 
     if (uid != null) {
-      // Makinig sa buong User object para makuha pati age at gender
       _dbRef.child('users/$uid').onValue.listen((event) {
         if (mounted && event.snapshot.value != null) {
           final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
           
+          // TAWAGIN ANG RESET LOGIC DITO
+          _checkAndResetDailyIntake(uid, data);
+
           setState(() {
             intakeDisplay = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
             age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
             gender = data['gender']?.toString() ?? "Male";
-            
-            // Auto-compute ng goal base sa DOH Table mo
             dailyGoal = calculateDOHGoal(age, gender);
           });
         }
@@ -65,9 +84,9 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // Compute percentage for the progress circle
     double percent = intakeDisplay / dailyGoal;
     if (percent > 1.0) percent = 1.0;
+    if (percent < 0.0) percent = 0.0; // Safety check
 
     return Scaffold(
       appBar: AppBar(
@@ -86,7 +105,7 @@ class _DashboardState extends State<Dashboard> {
           )
         ],
       ),
-      body: SingleChildScrollView( // Para iwas overflow sa maliit na screen
+      body: SingleChildScrollView(
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -98,7 +117,6 @@ class _DashboardState extends State<Dashboard> {
               ),
               const SizedBox(height: 30),
 
-              // --- CIRCULAR PROGRESS INDICATOR ---
               CircularPercentIndicator(
                 radius: 130.0,
                 lineWidth: 20.0,
@@ -123,11 +141,9 @@ class _DashboardState extends State<Dashboard> {
                   ],
                 ),
               ),
-              // -----------------------------------
 
               const SizedBox(height: 40),
               
-              // Info Card para sa DOH Goal
               Container(
                 padding: const EdgeInsets.all(16),
                 margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -148,6 +164,7 @@ class _DashboardState extends State<Dashboard> {
                   ],
                 ),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
