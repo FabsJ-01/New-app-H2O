@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:intl/intl.dart'; // Import for date formatting
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -62,6 +63,9 @@ class _RegisterPageState extends State<RegisterPage> {
       );
 
       final String uid = userCredential.user!.uid;
+      
+      // Kunin ang petsa ngayon para sa initial last_update
+      String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
       // B. Save Profile Data sa Firestore (For records)
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
@@ -72,13 +76,13 @@ class _RegisterPageState extends State<RegisterPage> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // C. ITO ANG PINAKA-IMPORTANTE: Save sa Realtime Database (Para sa Dashboard)
-      // Dito natin isasama ang age at gender para mabasa ng Dashboard listener
+      // C. Save sa Realtime Database (Kasama ang last_update para sa reset logic)
       await FirebaseDatabase.instance.ref("users/$uid").set({
         'intake': 0,
         'age': userAge,
         'gender': selectedGender,
         'psu_id': idController.text.trim(),
+        'last_update': today, // Mahalaga ito para sa Dashboard reset
       });
       
       if (mounted) Navigator.pop(context); // Tanggalin ang Loading Dialog
@@ -137,7 +141,7 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 15),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Gender", border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
-              initialValue: selectedGender,
+              value: selectedGender, // Corrected from initialValue
               items: genders.map((String value) => DropdownMenuItem<String>(value: value, child: Text(value))).toList(),
               onChanged: (String? newValue) => setState(() => selectedGender = newValue),
             ),
@@ -150,7 +154,7 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 15),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Role", border: OutlineInputBorder(), prefixIcon: Icon(Icons.work)),
-              initialValue: selectedRole,
+              value: selectedRole, // Corrected from initialValue
               items: roles.map((String value) => DropdownMenuItem<String>(value: value, child: Text(value))).toList(),
               onChanged: (String? newValue) => setState(() => selectedRole = newValue),
             ),
@@ -186,4 +190,4 @@ class _RegisterPageState extends State<RegisterPage> {
       ),
     );
   }
-}   
+}
