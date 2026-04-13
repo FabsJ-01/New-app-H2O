@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "995511644780",
+    "firebase_url": "https://h2o-project-e83d9-default-rtdb.firebaseio.com",
+    "project_id": "h2o-project-e83d9",
+    "storage_bucket": "h2o-project-e83d9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:995511644780:android:c6a7ee4f3e292277871e49",
+        "android_client_info": {
+          "package_name": "com.dev.h2o_psu_lubao"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiLkat5aIx7cHba4b0OwTOBrQveN2TduM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
