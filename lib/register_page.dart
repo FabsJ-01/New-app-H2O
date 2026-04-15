@@ -141,7 +141,7 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 15),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Gender", border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
-              value: selectedGender, // Corrected from initialValue
+              initialValue: selectedGender, // Corrected from initialValue
               items: genders.map((String value) => DropdownMenuItem<String>(value: value, child: Text(value))).toList(),
               onChanged: (String? newValue) => setState(() => selectedGender = newValue),
             ),
@@ -154,7 +154,7 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 15),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Role", border: OutlineInputBorder(), prefixIcon: Icon(Icons.work)),
-              value: selectedRole, // Corrected from initialValue
+              initialValue: selectedRole, // Corrected from initialValue
               items: roles.map((String value) => DropdownMenuItem<String>(value: value, child: Text(value))).toList(),
               onChanged: (String? newValue) => setState(() => selectedRole = newValue),
             ),

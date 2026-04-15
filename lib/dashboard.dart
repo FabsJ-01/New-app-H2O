@@ -6,6 +6,8 @@ import 'package:percent_indicator/percent_indicator.dart';
 import 'package:intl/intl.dart'; 
 import 'package:qr_flutter/qr_flutter.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; 
+import 'main.dart'; // Importante para makuha ang global flutterLocalNotificationsPlugin
 import 'profile_page.dart';
 
 class Dashboard extends StatefulWidget {
@@ -22,6 +24,9 @@ class _DashboardState extends State<Dashboard> {
   int age = 19;
   bool _isMachineReady = false; 
   String? localUid;
+  
+  // Para hindi paulit-ulit ang reminder notif sa isang session
+  bool _reminderSentToday = false; 
 
   final DatabaseReference _dbRef = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
@@ -35,7 +40,28 @@ class _DashboardState extends State<Dashboard> {
     _activateListeners();
   }
 
-  _loadOfflineData() async {
+  // --- UNIVERSAL NOTIFICATION FUNCTION ---
+  Future<void> _sendNotification(String title, String body) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'h2o_hydration_channel',
+      'Hydration Alerts',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+
+   await flutterLocalNotificationsPlugin.show(
+          id: 0, 
+          title: title, 
+          body: body, 
+          notificationDetails: platformChannelSpecifics
+          );
+  }
+
+  Future<void> _loadOfflineData() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
       intakeDisplay = prefs.getDouble('last_intake') ?? 0.0;
@@ -72,27 +98,14 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // BAGONG LOGIC: Ito ang tatawagin ng "DISPENSE WATER" button
   void _triggerWaterDispense() async {
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
     if (currentUid != null) {
       await _dbRef.child('users/$currentUid').update({
-        'coin_trigger': true, // Signal sa Raspberry Pi na mag-pump na
+        'coin_trigger': true,
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.water_drop, color: Colors.white),
-              SizedBox(width: 10),
-              Text("Dispensing water... Please wait."),
-            ],
-          ),
-          backgroundColor: Colors.blue,
-          duration: Duration(seconds: 5),
-        ),
-      );
+      _sendNotification("Vending Started! 💧", "Nagsisimula na ang pag-dispense. Pakihanda ang bote!");
     }
   }
 
@@ -111,6 +124,7 @@ class _DashboardState extends State<Dashboard> {
         'intake': 0,
         'last_update': today,
       });
+      _reminderSentToday = false; // Reset reminder flag para sa bagong araw
     }
   }
 
@@ -124,20 +138,35 @@ class _DashboardState extends State<Dashboard> {
 
           final SharedPreferences prefs = await SharedPreferences.getInstance();
           
+          bool wasReady = _isMachineReady;
+          double oldIntake = intakeDisplay;
+
           setState(() {
             intakeDisplay = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
             age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
             gender = data['gender']?.toString() ?? "Male";
             dailyGoal = calculateDOHGoal(age, gender);
-            
-            // Ang Machine Ready ay lilitaw lang kapag tapos na mag-hulog ng barya
             _isMachineReady = data['coin_trigger'] == false && data['is_scanning'] == true;
           });
 
+          // LOGIC 1: STAY HYDRATED NOTIFICATION (Pagkatapos mag-dispense/madagdagan ang intake)
+          if (intakeDisplay > oldIntake && oldIntake != 0) {
+             _sendNotification("H2O Success! ✨", "Thank you for using PSU H2O. Stay Hydrated!");
+          }
+
+          // LOGIC 2: REMAINING ML NOTIFICATION (Reminder)
+          double remaining = dailyGoal - intakeDisplay;
+          if (remaining > 0 && intakeDisplay > 0 && !_reminderSentToday) {
+            _sendNotification("Hydration Goal", "You have ${remaining.toInt()}ml left to complete your daily goal!");
+            _reminderSentToday = true; // Isang beses lang mag-notif ang reminder
+          }
+
+          // LOGIC 3: CREDITS RECEIVED
+          if (!wasReady && _isMachineReady) {
+            _sendNotification("Credits Received! ✅", "Pindutin ang DISPENSE WATER button.");
+          }
+
           await prefs.setDouble('last_intake', intakeDisplay);
-          await prefs.setString('user_uid', currentUid);
-          await prefs.setInt('last_age', age);
-          await prefs.setString('last_gender', gender);
         }
       });
     }
@@ -176,7 +205,7 @@ class _DashboardState extends State<Dashboard> {
                   percent: percent,
                   animation: true,
                   circularStrokeCap: CircularStrokeCap.round,
-                  progressColor: Colors.blueAccent,
+                  progressColor: (percent >= 1.0) ? Colors.greenAccent : Colors.blueAccent,
                   backgroundColor: Colors.blue.shade50,
                   center: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -189,13 +218,12 @@ class _DashboardState extends State<Dashboard> {
 
                 const SizedBox(height: 40),
 
-                // Button Section
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 30),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 500),
                     child: _isMachineReady 
-                    ? Column( // KUNG NAKA-HULOG NA NG BARYA
+                    ? Column( 
                         key: const ValueKey("dispense"),
                         children: [
                           const Text("Credits Received!", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
@@ -219,7 +247,7 @@ class _DashboardState extends State<Dashboard> {
                           const Text("Make sure your bottle is ready!", style: TextStyle(fontSize: 12, color: Colors.grey)),
                         ],
                       )
-                    : Column( // DEFAULT VIEW: SHOW QR
+                    : Column( 
                         key: const ValueKey("qr"),
                         children: [
                           SizedBox(
