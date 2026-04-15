@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:intl/intl.dart'; 
 import 'package:qr_flutter/qr_flutter.dart'; 
-import 'package:shared_preferences/shared_preferences.dart'; // 1. Added this
+import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_page.dart';
 
 class Dashboard extends StatefulWidget {
@@ -21,7 +21,7 @@ class _DashboardState extends State<Dashboard> {
   String gender = "Male";
   int age = 19;
   bool _isMachineReady = false; 
-  String? localUid; // 2. Added local UID for offline QR
+  String? localUid;
 
   final DatabaseReference _dbRef = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
@@ -31,11 +31,10 @@ class _DashboardState extends State<Dashboard> {
   @override
   void initState() {
     super.initState();
-    _loadOfflineData(); // 3. Load saved data first
+    _loadOfflineData();
     _activateListeners();
   }
 
-  // 4. Function to load data from Phone Storage
   _loadOfflineData() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -48,29 +47,23 @@ class _DashboardState extends State<Dashboard> {
   }
 
   void _showQRDialog() {
-    // Gamitin ang localUid kung null ang Firebase UID (Offline mode)
     final displayUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Scan to Start", textAlign: TextAlign.center),
-        content: SizedBox(
-          width: 250, 
-          height: 250,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              QrImageView(
-                data: displayUid ?? "No UID Saved", // Reliable offline
-                version: QrVersions.auto,
-                size: 200.0,
-                backgroundColor: Colors.white,
-              ),
-              const SizedBox(height: 10),
-              const Text("Itapat ang QR sa scanner ng machine", textAlign: TextAlign.center),
-            ],
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            QrImageView(
+              data: displayUid ?? "No UID Saved",
+              version: QrVersions.auto,
+              size: 200.0,
+              backgroundColor: Colors.white,
+            ),
+            const SizedBox(height: 10),
+            const Text("Itapat ang QR sa scanner ng machine", textAlign: TextAlign.center),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CLOSE")),
@@ -79,17 +72,25 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  void _triggerCoinSlot() async {
+  // BAGONG LOGIC: Ito ang tatawagin ng "DISPENSE WATER" button
+  void _triggerWaterDispense() async {
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
     if (currentUid != null) {
       await _dbRef.child('users/$currentUid').update({
-        'coin_trigger': true,
-        'is_scanning': false, 
+        'coin_trigger': true, // Signal sa Raspberry Pi na mag-pump na
       });
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Coin slot activated! Please insert coin."),
-          backgroundColor: Colors.orange,
+          content: Row(
+            children: [
+              Icon(Icons.water_drop, color: Colors.white),
+              SizedBox(width: 10),
+              Text("Dispensing water... Please wait."),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 5),
         ),
       );
     }
@@ -105,7 +106,6 @@ class _DashboardState extends State<Dashboard> {
   void _checkAndResetDailyIntake(String uid, Map data) async {
     String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     String lastUpdate = data['last_update']?.toString() ?? "";
-
     if (today != lastUpdate) {
       await _dbRef.child('users/$uid').update({
         'intake': 0,
@@ -129,10 +129,11 @@ class _DashboardState extends State<Dashboard> {
             age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
             gender = data['gender']?.toString() ?? "Male";
             dailyGoal = calculateDOHGoal(age, gender);
-            _isMachineReady = data['is_scanning'] == true;
+            
+            // Ang Machine Ready ay lilitaw lang kapag tapos na mag-hulog ng barya
+            _isMachineReady = data['coin_trigger'] == false && data['is_scanning'] == true;
           });
 
-          // 5. Always save to SharedPreferences when data changes
           await prefs.setDouble('last_intake', intakeDisplay);
           await prefs.setString('user_uid', currentUid);
           await prefs.setInt('last_age', age);
@@ -158,7 +159,7 @@ class _DashboardState extends State<Dashboard> {
           )
         ],
       ),
-      body: RefreshIndicator( // Added for manual sync if online
+      body: RefreshIndicator(
         onRefresh: () async => _activateListeners(),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -169,81 +170,84 @@ class _DashboardState extends State<Dashboard> {
                 const Text("Daily Hydration Progress", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
 
-                SizedBox(
-                  height: 230,
-                  child: CircularPercentIndicator(
-                    radius: 110.0,
-                    lineWidth: 18.0,
-                    percent: percent,
-                    animation: true,
-                    circularStrokeCap: CircularStrokeCap.round,
-                    progressColor: Colors.blueAccent,
-                    backgroundColor: Colors.blue.shade50,
-                    center: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text("${(percent * 100).toInt()}%", style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold)),
-                        Text("${intakeDisplay.toInt()}ml / ${dailyGoal.toInt()}ml", style: const TextStyle(fontSize: 14)),
-                      ],
-                    ),
+                CircularPercentIndicator(
+                  radius: 110.0,
+                  lineWidth: 18.0,
+                  percent: percent,
+                  animation: true,
+                  circularStrokeCap: CircularStrokeCap.round,
+                  progressColor: Colors.blueAccent,
+                  backgroundColor: Colors.blue.shade50,
+                  center: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("${(percent * 100).toInt()}%", style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold)),
+                      Text("${intakeDisplay.toInt()}ml / ${dailyGoal.toInt()}ml", style: const TextStyle(fontSize: 14)),
+                    ],
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 40),
 
+                // Button Section
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 30),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _showQRDialog,
-                      icon: const Icon(Icons.qr_code_2),
-                      label: const Text("SHOW MY QR CODE"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[800],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 15),
-
-                if (_isMachineReady)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 30),
-                    child: Container(
-                      padding: const EdgeInsets.all(15),
-                      decoration: BoxDecoration(
-                        color: Colors.orange[50],
-                        border: Border.all(color: Colors.orange),
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Column(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 500),
+                    child: _isMachineReady 
+                    ? Column( // KUNG NAKA-HULOG NA NG BARYA
+                        key: const ValueKey("dispense"),
                         children: [
-                          const Text("Machine Verified! Proceed to pay?", style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text("Credits Received!", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 10),
                           SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _triggerCoinSlot,
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-                              child: const Text("ACTIVATE COIN SLOT"),
+                            height: 65,
+                            child: ElevatedButton.icon(
+                              onPressed: _triggerWaterDispense,
+                              icon: const Icon(Icons.water_drop, size: 28),
+                              label: const Text("DISPENSE WATER", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[600],
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                elevation: 10,
+                              ),
                             ),
                           ),
+                          const SizedBox(height: 10),
+                          const Text("Make sure your bottle is ready!", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      )
+                    : Column( // DEFAULT VIEW: SHOW QR
+                        key: const ValueKey("qr"),
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            height: 55,
+                            child: ElevatedButton.icon(
+                              onPressed: _showQRDialog,
+                              icon: const Icon(Icons.qr_code_2),
+                              label: const Text("SHOW MY QR CODE"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[800],
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          const Text("Scan QR at the machine to start", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
                         ],
                       ),
-                    ),
-                  )
-                else
-                  const Text("Waiting for machine scan...", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+                  ),
+                ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 40),
                 
                 Container(
                   padding: const EdgeInsets.all(16),
-                  margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+                  margin: const EdgeInsets.symmetric(horizontal: 30),
                   decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(15)),
                   child: Text(
                     "Goal: ${dailyGoal.toInt()}ml (DOH guidelines for a $age year old $gender).",
