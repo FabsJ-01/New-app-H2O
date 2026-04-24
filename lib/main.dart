@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Importante ito para sa StreamBuilder
+import 'package:firebase_auth/firebase_auth.dart'; 
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as t;
-import 'login_page.dart';
-import 'dashboard.dart'; // Naka-uncomment na ito para gumana ang auto-login
-import 'dart:io';
-// Global instance para matawag natin ang notifications kahit saan
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+// Import your files
+import 'login_page.dart';        
+import 'dashboard.dart';         
+import 'admin_login.dart';       
+import 'admin_dashboard.dart';   
+import 'firebase_options.dart';
+
+// Import Platform safely
+import 'dart:io' show Platform;
+
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
@@ -15,32 +23,61 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 1. Initialize Firebase
-  await Firebase.initializeApp();
-  
-  // 2. Enable Offline Persistence para sa Database
-  FirebaseDatabase.instance.setPersistenceEnabled(true);
-  
-  // 3. Initialize Timezones
-  t.initializeTimeZones();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print("Firebase connected successfully!");
+  } catch (e) {
+    print("Firebase initialization failed: $e");
+  }
 
-  // 4. Notification Settings for Android
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
+  // 2. Mobile-Only Setup (Android & iOS)
+  if (!kIsWeb) {
+    FirebaseDatabase.instance.setPersistenceEnabled(true);
+    t.initializeTimeZones();
 
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-  );
+    // Android Notification Settings
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  await flutterLocalNotificationsPlugin.initialize(
+    // NEW: iOS (Darwin) Notification Settings
+    const DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
+    // Combine settings
+    final InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsIOS, // Isama ang iOS settings dito
+    );
+
+    await flutterLocalNotificationsPlugin.initialize(
     settings: initializationSettings,
     onDidReceiveNotificationResponse: (NotificationResponse response) {
       debugPrint("Notification Clicked!");
     },
-  );  
-  if (Platform.isAndroid) {
-  flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
-      AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
-}
+  );
+
+    // Request Permissions based on platform
+    if (Platform.isAndroid) {
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    } else if (Platform.isIOS) {
+      // NEW: iOS specific permission request
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+    }
+  }
 
   runApp(const H2OApp());
 }
@@ -53,25 +90,28 @@ class H2OApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'H2O Smart Vending',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      // DITO ANG MAGIC: StreamBuilder ang magbabantay kung logged in ang user
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        // Inalis ko ang useMaterial3: false para mas maging modern ang itsura sa iOS
+        useMaterial3: true, 
+      ),
+      
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // Habang chine-check pa ng Firebase ang login session
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
           }
-          
-          // Kung may "data" (User) sa snapshot, diretso sa Dashboard
+
           if (snapshot.hasData) {
-            return const Dashboard();
+            // Naka-login: Check if Web (Admin) or Mobile (User)
+            return kIsWeb ? const AdminDashboard() : const Dashboard();
+          } else {
+            // Hindi naka-login
+            return kIsWeb ? const AdminLoginPage() : const LoginPage();
           }
-          
-          // Kung walang user, balik sa LoginPage
-          return const LoginPage();
         },
       ),
     );
