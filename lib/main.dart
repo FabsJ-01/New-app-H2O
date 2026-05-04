@@ -42,7 +42,7 @@ void callbackDispatcher() {
           double intake = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
           final now = DateTime.now();
           
-          // Reminder logic
+          // pwede ito sa tester sa panel mwah mwah
           if (now.hour >= 14 && intake < 2000) {
              int kulang = 2000 - intake.toInt();
              await NotificationScheduler.showInstantNotification(
