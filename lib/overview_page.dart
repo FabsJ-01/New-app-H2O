@@ -78,7 +78,6 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   // --- AUTHORIZED DELETE DIALOG (LOGIN PASSWORD CONFIRMATION) ---
-  // --- AUTHORIZED DELETE DIALOG (UPDATED & FIXED) ---
   void _showDeleteDialog(String id, String name) {
     final TextEditingController passwordController = TextEditingController();
     bool isPasswordVisible = false;
@@ -117,23 +116,18 @@ class _OverviewPageState extends State<OverviewPage> {
                   final user = _auth.currentUser;
                   if (user != null && user.email != null) {
                     try {
-                      // Gagawa ng credential gamit ang email mo at ang tinype mong password
                       AuthCredential credential = EmailAuthProvider.credential(
                         email: user.email!,
                         password: passwordController.text.trim(),
                       );
 
-                      // Re-authenticate: Dito tinitingnan kung tama ang password mo sa login
                       await user.reauthenticateWithCredential(credential);
-
-                      // Kung tama, proceed sa pag-delete ng vendo sa database
                       await _dbRef.child('vendos').child(id).remove();
                       
                       if (!mounted) return;
                       Navigator.pop(context);
                       _showSnackBar("$name deleted successfully.", Colors.red);
                     } on FirebaseAuthException catch (e) {
-                      // Error checking para malaman kung bakit incorrect
                       if (e.code == 'wrong-password') {
                         _showSnackBar("Incorrect password! Use your login password.", Colors.orange);
                       } else {
@@ -152,8 +146,6 @@ class _OverviewPageState extends State<OverviewPage> {
       ),
     );
   }
-
-  // @override
 
   // Re-usable SnackBar
   void _showSnackBar(String message, Color color) {
@@ -289,12 +281,37 @@ class _OverviewPageState extends State<OverviewPage> {
             const Divider(height: 40),
             _buildPricingConfig(id, mlPerPeso),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                _buildQuickStat("Water Level", "$waterLevel%", Icons.opacity, waterLevel > 20 ? Colors.blue : Colors.red),
-                _buildUsersTodayStat(id), 
-                _buildQuickStat("Ratio", "₱1:${mlPerPeso}ml", Icons.scale, Colors.teal),
-              ],
+            
+            // INAYOS NA LAYOUTBUILDER: Nilagyan ng IntrinsicHeight para maging pantay-pantay ang taas ng mga blocks nang walang overflow aror
+            LayoutBuilder(
+              builder: (context, constraints) {
+                bool isCompact = constraints.maxWidth < 550;
+                
+                if (isCompact) {
+                  return Column(
+                    children: [
+                      _buildQuickStat("Water Level", "$waterLevel%", Icons.opacity, waterLevel > 20 ? Colors.blue : Colors.red),
+                      const SizedBox(height: 12),
+                      _buildUsersTodayStat(id),
+                      const SizedBox(height: 12),
+                      _buildQuickStat("Ratio", "₱1:${mlPerPeso}ml", Icons.scale, Colors.teal),
+                    ],
+                  );
+                } else {
+                  return IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _buildQuickStat("Water Level", "$waterLevel%", Icons.opacity, waterLevel > 20 ? Colors.blue : Colors.red)),
+                        const SizedBox(width: 15),
+                        Expanded(child: _buildUsersTodayStat(id)),
+                        const SizedBox(width: 15),
+                        Expanded(child: _buildQuickStat("Ratio", "₱1:${mlPerPeso}ml", Icons.scale, Colors.teal)),
+                      ],
+                    ),
+                  );
+                }
+              },
             ),
             const SizedBox(height: 30),
             Row(
@@ -346,13 +363,11 @@ class _OverviewPageState extends State<OverviewPage> {
           logs.forEach((key, log) {
             String currentLogVendoId = log['vendo_id']?.toString() ?? "";
             
-            // Flexible matching para sa "vendo_001", "001", o "1"
             bool isMatchingVendo = (currentLogVendoId == vendoId) || 
                                    (currentLogVendoId.contains(vendoId)) || 
                                    (vendoId.contains(currentLogVendoId));
 
             if (isMatchingVendo && log['timestamp']?.toString().startsWith(_todayDate) == true) {
-              // Binabasa ang key na 'uid' mula sa Firebase at sinasala ang unique entries gamit ang Set
               String? uid = log['uid']?.toString();
               if (uid != null) {
                 uniqueUsers.add(uid);
@@ -387,16 +402,41 @@ class _OverviewPageState extends State<OverviewPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text("Pricing Config", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-          Row(
-            children: [
-              IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.orange), onPressed: () {
-                if (mlPerPeso > 10) _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 10);
-              }),
-              Text("$mlPerPeso ml / ₱1", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              IconButton(icon: const Icon(Icons.add_circle_outline, color: Colors.orange), onPressed: () {
-                if (mlPerPeso < 1000) _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 10);
-              }),
-            ],
+          
+          // INAYOS NA ROW CONTROLS: Nilagyan ng Flexible at FittedBox para hindi mag-overflow sa CP
+          Flexible(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.remove_circle_outline, color: Colors.orange), 
+                  onPressed: () {
+                    if (mlPerPeso > 10) _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 10);
+                  },
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      "$mlPerPeso ml / ₱1", 
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.add_circle_outline, color: Colors.orange), 
+                  onPressed: () {
+                    if (mlPerPeso < 1000) _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 10);
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -404,22 +444,27 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   Widget _buildQuickStat(String label, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 5),
-        padding: const EdgeInsets.symmetric(vertical: 15),
-        decoration: BoxDecoration(color: color.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 5),
-            Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-          ],
-        ),
+    // TINANGGAL ANG FIX HEIGHT AT BINIGYAN NG PADDING: Para kusang sumunod ang taas depende sa sukat ng text nang hindi nagkakaroon ng overflow bar
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05), 
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
+        ],
       ),
     );
-  }
+  } 
 
   Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onPressed) {
     return ElevatedButton.icon(
@@ -431,7 +476,10 @@ class _OverviewPageState extends State<OverviewPage> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
       onPressed: onPressed,
       icon: Icon(icon, size: 20),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      label: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
     );
   }
 }

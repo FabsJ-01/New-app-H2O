@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:ui';
-//import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
@@ -34,8 +33,9 @@ void callbackDispatcher() {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
       
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final ref = FirebaseDatabase.instance.ref('users/${user.uid}');
+      if (user != null && user.email != null) {
+        String psuId = user.email!.split('@')[0]; // Ginawang psuId para tugma sa DB path niyo
+        final ref = FirebaseDatabase.instance.ref('users/$psuId');
         final snapshot = await ref.get();
         if (snapshot.exists) {
           final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
@@ -76,14 +76,17 @@ void onStart(ServiceInstance service) async {
 
   try {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? uid = prefs.getString('user_uid');
+    String? psuId = prefs.getString('user_psu_id'); // Binago mula user_uid -> user_psu_id
 
-    if (uid != null) {
-      DatabaseReference dbRef = FirebaseDatabase.instance.ref().child('users/$uid');
+    if (psuId != null) {
+      DatabaseReference dbRef = FirebaseDatabase.instance.ref().child('users/$psuId');
       dbRef.onValue.listen((event) {
         if (event.snapshot.value != null) {
           final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
           
+          // Kung habang tumatakbo ang background service ay nakitang na-reset ng admin, ihinto ang notif checking
+          if (data['status'] == 'Password Reset by Admin') return;
+
           bool isScanning = data['is_scanning'] == true;
           bool coinTrigger = data['coin_trigger'] == true;
           int amount = int.tryParse(data['last_credits']?.toString() ?? "0") ?? 0;
@@ -101,27 +104,21 @@ void onStart(ServiceInstance service) async {
           double intake = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
           int dailyGoal = int.tryParse(data['daily_goal']?.toString() ?? "2000") ?? 2000;
 
-          // STOP: Kapag nakuha na ang goal, hinto na ang reminders
           if (intake >= dailyGoal) return;
 
-          // SCHOOL HOURS CHECK: 7 AM to 7 PM (19:00)
           final now = DateTime.now();
-          if (now.hour < 7 || now.hour >= 19) {
-            return; // Exit if outside school hours
-          }
+          if (now.hour < 7 || now.hour >= 19) return; 
 
           if (lastDrink != null) {
             DateTime lastTime = DateTime.parse(lastDrink);
             Duration diff = now.difference(lastTime);
 
-            // A. Initial Reminder (1 Hour / 60 Minutes)
             if (diff.inMinutes == 60) {
               NotificationScheduler.showInstantNotification(
                 title: "H2O HUB: Time to Hydrate! 💧",
                 body: "It's been 1 hour since your last drink. Stay hydrated, Student!",
               );
             } 
-            // B. Nagging Follow-up (Every 30 mins after the first hour)
             else if (diff.inMinutes > 60) {
               int extraMinutes = diff.inMinutes - 60;
               if (extraMinutes % 30 == 0) {
@@ -152,10 +149,10 @@ Future<void> initializeBackgroundService() async {
   );
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  
+
   await flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-      ?.createNotificationChannel(channel);
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
@@ -194,9 +191,10 @@ void main() async {
     await initializeBackgroundService();
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+    if (user != null && user.email != null) {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user_uid', user.uid);
+      String psuId = user.email!.split('@')[0];
+      await prefs.setString('user_psu_id', psuId); // Sinisave na natin ang PSU ID imbis na UID
     }
   }
 
@@ -224,7 +222,27 @@ class H2OApp extends StatelessWidget {
           }
           
           if (snapshot.hasData) {
-            return kIsWeb ? const AdminDashboard() : const Dashboard();
+            if (kIsWeb) return const AdminDashboard();
+
+            // KUNG MOBILE APP: Suriin kung galing sa reset ang status bago tuluyang papasukin sa Dashboard
+            String psuId = snapshot.data!.email!.split('@')[0];
+            
+            return FutureBuilder<DataSnapshot>(
+              future: FirebaseDatabase.instance.ref().child('users/$psuId/status').get(),
+              builder: (context, statusSnapshot) {
+                if (statusSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(body: Center(child: CircularProgressIndicator()));
+                }
+                
+                // Kapag napansin na 'Password Reset by Admin' pala ang tag sa database, pilitin mag log-out
+                if (statusSnapshot.hasData && statusSnapshot.data!.value == 'Password Reset by Admin') {
+                  FirebaseAuth.instance.signOut();
+                  return const LoginPage();
+                }
+                
+                return const Dashboard();
+              },
+            );
           } else {
             return kIsWeb ? const AdminLoginPage() : const LoginPage();
           }

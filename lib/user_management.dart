@@ -16,72 +16,75 @@ class _UserManagementState extends State<UserManagement> {
   String searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
 
-  void _resetUserPassword(String uid, String psuId) {
-    globalUserRef.child(uid).update({
-      'password': psuId, 
-      'status': 'Password Reset by Admin'
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Password for $psuId reset to default."), 
-        backgroundColor: Colors.orange
-      ),
-    );
-  }
-
   void _showDeleteUserDialog(String uid, String psuId) {
     TextEditingController adminPassController = TextEditingController();
+    bool obscureAdminPass = true; // State para sa pagpapakita o pagtatago ng password
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Confirm Delete Account"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text("Sigurado ka bang buburahin ang account ni $psuId?"),
-            const SizedBox(height: 15),
-            TextField(
-              controller: adminPassController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: "Admin Password",
-                border: OutlineInputBorder(),
-              ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text("Confirm Delete Account"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("Sigurado ka bang buburahin ang account ni $psuId?"),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: adminPassController,
+                  obscureText: obscureAdminPass, // Nakatali sa state variable
+                  decoration: InputDecoration(
+                    labelText: "Admin Password",
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscureAdminPass ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        // setDialogState ang mag-a-update ng UI sa loob lang ng dialog
+                        setDialogState(() {
+                          obscureAdminPass = !obscureAdminPass;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text("Cancel")
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              try {
-                User? admin = FirebaseAuth.instance.currentUser;
-                AuthCredential credential = EmailAuthProvider.credential(
-                  email: admin!.email!,
-                  password: adminPassController.text.trim(),
-                );
-                
-                await admin.reauthenticateWithCredential(credential);
-                await globalUserRef.child(uid).remove(); 
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("User Deleted"), backgroundColor: Colors.red)
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Mali ang Admin Password!"))
-                );
-              }
-            },
-            child: const Text("Delete", style: TextStyle(color: Colors.white)),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context), 
+                child: const Text("Cancel")
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () async {
+                  try {
+                    User? admin = FirebaseAuth.instance.currentUser;
+                    AuthCredential credential = EmailAuthProvider.credential(
+                      email: admin!.email!,
+                      password: adminPassController.text.trim(),
+                    );
+                    
+                    await admin.reauthenticateWithCredential(credential);
+                    await globalUserRef.child(uid).remove(); 
+                    if (context.mounted) Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("User Deleted"), backgroundColor: Colors.red)
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Mali ang Admin Password!"))
+                    );
+                  }
+                },
+                child: const Text("Delete", style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -155,7 +158,6 @@ class _UserManagementState extends State<UserManagement> {
                     return const Center(child: Text("No matching PSU ID found."));
                   }
 
-                  // Gagamit tayo ng LayoutBuilder para mag-fit ang table sa screen
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       return SingleChildScrollView(
@@ -165,7 +167,7 @@ class _UserManagementState extends State<UserManagement> {
                           child: ConstrainedBox(
                             constraints: BoxConstraints(minWidth: constraints.maxWidth),
                             child: DataTable(
-                              columnSpacing: (constraints.maxWidth < 600) ? 20 : 40, // Mas maliit na spacing sa mobile
+                              columnSpacing: (constraints.maxWidth < 600) ? 20 : 40, 
                               headingRowHeight: 50,
                               dataRowHeight: 60,
                               columns: const [
@@ -189,10 +191,6 @@ class _UserManagementState extends State<UserManagement> {
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.lock_reset, color: Colors.orange, size: 20),
-                                          onPressed: () => _resetUserPassword(uid, psuId),
-                                        ),
                                         IconButton(
                                           icon: const Icon(Icons.delete_forever, color: Colors.red, size: 20),
                                           onPressed: () => _showDeleteUserDialog(uid, psuId),

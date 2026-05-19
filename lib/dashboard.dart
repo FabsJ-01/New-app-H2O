@@ -101,15 +101,18 @@ class _DashboardState extends State<Dashboard> {
   }
 
   void _checkAndResetDailyIntake(String uid, Map data) async {
-    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    String lastUpdate = data['last_update']?.toString() ?? "";
-    if (today != lastUpdate) {
-      await _dbRef.child('users/$uid').update({
-        'intake': 0,
-        'last_update': today,
-      });
-    }
+  String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  
+  // INAYOS: Binago mula 'last_update' patungong 'update' para tugma sa Firebase ninyo
+  String lastUpdate = data['update']?.toString() ?? "";
+  
+  if (today != lastUpdate) {
+    await _dbRef.child('users/$uid').update({
+      'intake': 0,
+      'update': today, // INAYOS: 'update' na rin ang isusulat sa database
+    });
   }
+}
 
   void _activateListeners() {
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart'; // Idinagdag para ma-update ang status sa database
 import 'login_page.dart';
 
 class ChangePasswordPage extends StatefulWidget {
@@ -50,7 +51,24 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     }
 
     try {
-      await FirebaseAuth.instance.currentUser?.updatePassword(newPass);
+      // 1. Kunin ang kasalukuyang user na dinala rito ng login page bypass logic
+      final user = FirebaseAuth.instance.currentUser;
+      
+      if (user != null && user.email != null) {
+        // Kunin ang PSU ID mula sa email format (e.g., 2023311060@psu.edu.ph -> 2023311060)
+        String psuId = user.email!.split('@')[0];
+
+        // 2. I-update ang password sa Firebase Authentication para opisyal na silang makalogin sa susunod
+        await user.updatePassword(newPass);
+
+        // 3. I-update ang Realtime Database: Baguhin ang password at ibalik sa 'Active' ang status
+        await FirebaseDatabase.instance.ref().child('users/$psuId').update({
+          'password': newPass,
+          'status': 'Active', // Tinanggal na ang 'Password Reset by Admin' tag
+        });
+      }
+
+      // I-sign out muna para pilitin silang mag-login gamit ang bago nilang gawang password
       await FirebaseAuth.instance.signOut();
 
       if (mounted) {

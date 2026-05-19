@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart'; 
 import 'dashboard.dart';    
+import 'package:firebase_database/firebase_database.dart'; 
+import 'change_password_page.dart'; 
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,8 +18,10 @@ class _LoginPageState extends State<LoginPage> {
   bool isPasswordVisible = false;
 
   Future<void> _login() async {
-    // 1. Check muna kung may laman ang fields
-    if (idController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
+    String psuId = idController.text.trim();
+    String inputPassword = passwordController.text.trim();
+
+    if (psuId.isEmpty || inputPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Pakisulat ang PSU ID at Password."), backgroundColor: Colors.orange),
       );
@@ -25,12 +29,51 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     try {
-      // 2. Logic: Ginagawang email ang ID sa background (@psu.edu.ph)
-      String psuEmail = "${idController.text.trim()}@psu.edu.ph";
+      // 1. SILIPIN ANG BUONG USERS NODE PARA HANAPIN KUNG NASAAN ANG PSU ID
+      final databaseRef = FirebaseDatabase.instance.ref().child('users');
+      final snapshot = await databaseRef.get();
 
+      if (snapshot.exists) {
+        Map<dynamic, dynamic> allUsers = snapshot.value as Map<dynamic, dynamic>;
+        Map<dynamic, dynamic>? targetUserData;
+
+        // Iikutin ang bawat mahabang UID folder para hanapin ang tumutugmang psu_id
+        allUsers.forEach((key, value) {
+          if (value is Map && value['psu_id'].toString() == psuId) {
+            targetUserData = value;
+          }
+        });
+
+        // Kung nahanap ang account ng estudyante sa database
+        if (targetUserData != null) {
+          // KUNG ANG ACCOUNT AY NI-RESET NG ADMIN AT TUGMA ANG INPUT PASSWORD
+          if (targetUserData!['status'] == 'Password Reset by Admin' && 
+              (targetUserData!['password'] == inputPassword || inputPassword == "PsulubaoH2o" || inputPassword == "${psuId}H2o")) {
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Admin Reset Detected! Pakisulat ang iyong bagong password."), 
+                  backgroundColor: Colors.blue
+                ),
+              );
+
+              // DIRETSO SA CHANGE PASSWORD PAGE 
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
+              );
+            }
+            return; // Hihinto na rito, ligtas sa Auth block!
+          }
+        }
+      }
+
+      // 2. NORMAL LOGIN: Kung hindi naman ni-reset o normal ang status
+      String psuEmail = "$psuId@psu.edu.ph";
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: psuEmail,
-        password: passwordController.text.trim(),
+        password: inputPassword,
       );
 
       if (mounted) {
@@ -39,10 +82,9 @@ class _LoginPageState extends State<LoginPage> {
           MaterialPageRoute(builder: (context) => const Dashboard()),
         );
       }
+
     } on FirebaseAuthException catch (e) {
-      // 3. Mas specific na error messages
       String errorMessage = "Mali ang PSU ID o Password.";
-      
       if (e.code == 'user-not-found') {
         errorMessage = "Hindi rehistrado ang ID na ito.";
       } else if (e.code == 'wrong-password') {
@@ -59,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+          SnackBar(content: Text("System Error: ${e.toString()}"), backgroundColor: Colors.red),
         );
       }
     }
@@ -68,19 +110,17 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Ginamit ko ang SingleChildScrollView para hindi mag-error ang layout pag lumabas ang keyboard
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(25.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo placeholder or PSU Title
               const Icon(Icons.water_drop, size: 80, color: Colors.blue),
               const SizedBox(height: 10),
               const Text(
                 "PSU H2O LOGIN", 
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)) // Dark Blue PSU Color
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))
               ),
               const SizedBox(height: 30),
 
@@ -119,7 +159,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: ElevatedButton(
                   onPressed: _login,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D47A1), // PSU Dark Blue
+                    backgroundColor: const Color(0xFF0D47A1),
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
                   ),
