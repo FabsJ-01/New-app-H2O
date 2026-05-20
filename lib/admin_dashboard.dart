@@ -4,6 +4,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'overview_page.dart'; 
 import 'user_management.dart';
 import 'dispense_logs_page.dart'; 
+import 'analytics_page.dart'; // INIMPORT ANG BAGONG FILE PARA SA VISUALIZATION DATA
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -76,11 +77,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // TIGNAN KUNG MALIIT ANG SCREEN (Mobile / CP View)
         bool isMobile = constraints.maxWidth < 600;
 
         return Scaffold(
-          // 1. MOBILE APP BAR: Lalabas lang sa CP para may pindutan ng menu drawer
           appBar: isMobile
               ? AppBar(
                   title: Text(_activeScreen, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
@@ -89,7 +88,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 )
               : null,
 
-          // 2. MOBILE DRAWER: Sliding menu para sa CP portrait view
           drawer: isMobile
               ? Drawer(
                   child: Container(
@@ -99,12 +97,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 )
               : null,
 
-          // 3. MAIN BODY LAYOUT
           body: Stack(
             children: [
               Row(
                 children: [
-                  // --- SIDEBAR Component (Para sa PC/Tablet; hidden kapag CP) ---
                   if (!isMobile)
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 250),
@@ -114,18 +110,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       child: _buildSidebarContent(forceExpand: _isSidebarExpanded),
                     ),
 
-                  // --- MAIN DYNAMIC CONTENT SCREEN (Overview, Logs, etc.) ---
                   Expanded(
                     child: Container(
                       color: Colors.blueGrey[50],
-                      padding: EdgeInsets.all(isMobile ? 15 : 30), // Mas maliit na padding sa mobile
+                      padding: EdgeInsets.all(isMobile ? 15 : 30), 
                       child: _buildBodyContent(),
                     ),
                   ),
                 ],
               ),
 
-              // --- FLOATING TOGGLE BUTTON (Nakalutang sa line ng Blue/White; hidden sa CP) ---
               if (!isMobile)
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 250),
@@ -174,7 +168,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // --- REUSABLE SIDEBAR CONTENT (Ginagamit ng Sidebar sa PC at Drawer sa Mobile) ---
   Widget _buildSidebarContent({required bool forceExpand, bool isDrawer = false}) {
     return Column(
       children: [
@@ -199,7 +192,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
         const Divider(color: Colors.white24, height: 1),
         const SizedBox(height: 15),
 
+        // MGA MENU ITEMS: DITO INILAGAY ANG ANALYTICS SA BABA NI OVERVIEW
         _buildSidebarItem(Icons.dashboard, "Overview", forceExpand, isDrawer),
+        _buildSidebarItem(Icons.bar_chart, "Analytics & Reports", forceExpand, isDrawer), // ◄ BAGONG ITEM
         _buildSidebarItem(Icons.assignment, "Dispense Logs", forceExpand, isDrawer),
         _buildSidebarItem(Icons.people, "User Management", forceExpand, isDrawer),
         
@@ -215,7 +210,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ? const Text("Add New Unit", style: TextStyle(color: Color.fromARGB(255, 0, 93, 150), fontWeight: FontWeight.bold))
               : null,
           onTap: () {
-            if (isDrawer) Navigator.pop(context); // Isasara ang drawer sa CP bago lumabas ang dialog
+            if (isDrawer) Navigator.pop(context); 
             _showAddVendoDialog();
           },
         ),
@@ -233,10 +228,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // DINAGDAGAN ANG SWITCH LOGIC PARA SA ANALYTICS PAGE
   Widget _buildBodyContent() {
     switch (_activeScreen) {
       case "Overview":
         return const OverviewPage();
+      case "Analytics & Reports": // ◄ MAPUPUNTA DITO KAPAG PININDOT ANG SIDEBAR ITEM
+        return const AnalyticsPage(); 
       case "Dispense Logs":
         return const DispenseLogsPage(); 
       case "User Management":
@@ -262,7 +260,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           : null,
       onTap: () {
         setState(() => _activeScreen = title);
-        if (isDrawer) Navigator.pop(context); // Automatic isasara ang drawer sa mobile pagkapili ng screen
+        if (isDrawer) Navigator.pop(context); 
       },
     );
   }
