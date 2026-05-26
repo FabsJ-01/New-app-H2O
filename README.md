@@ -70,8 +70,9 @@ The physical components integrated to track water consumption:
 *   `/assets/images/`: Storage for branding assets and the official logo.
 
 ## 👥 Project Team
-*   **Developers**: Team
-*   **Campus**: Pangasinan State University - Lubao Campus
+*   **Developer**: James Eagan Pulusan Fabian
+**Hardware/Analysis** James Fabian
+*   **Campus**: Pampanga State University - Lubao Campus
 
 ---
 *Generated for the H2O HUB Development Project - 2026.*

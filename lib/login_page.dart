@@ -84,13 +84,13 @@ class _LoginPageState extends State<LoginPage> {
       }
 
     } on FirebaseAuthException catch (e) {
-      String errorMessage = "Mali ang PSU ID o Password.";
+      String errorMessage = "Wrong PSU ID or Password.";
       if (e.code == 'user-not-found') {
-        errorMessage = "Hindi rehistrado ang ID na ito.";
+        errorMessage = "Not registered PSU ID.";
       } else if (e.code == 'wrong-password') {
-        errorMessage = "Maling password. Pakisubukang muli.";
+        errorMessage = "Wrong password. Please try again.";
       } else if (e.code == 'invalid-email') {
-        errorMessage = "Format error sa ID Number.";
+        errorMessage = "Email format error.";
       }
 
       if (mounted) {

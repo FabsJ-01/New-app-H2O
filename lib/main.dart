@@ -25,35 +25,75 @@ import 'dashboard.dart';
 import 'admin_login.dart';        
 import 'admin_dashboard.dart';    
 
-// --- 1. WORKMANAGER CALLBACK (Daily Reminders) ---
+// --- 1. WORKMANAGER CALLBACK ---
+double _calculateWorkmanagerDOHGoal(int age, String gender) {
+  if (age >= 19 && age <= 59) return (gender == "Male") ? 3000.0 : 2300.0;
+  if (age >= 16 && age <= 18) return (gender == "Male") ? 2600.0 : 2200.0;
+  if (age >= 13 && age <= 15) return (gender == "Male") ? 2400.0 : 2100.0;
+  return 2000.0;
+}
+
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      await Firebase.initializeApp();
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
       
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null && user.email != null) {
-        String psuId = user.email!.split('@')[0]; // Ginawang psuId para tugma sa DB path niyo
-        final ref = FirebaseDatabase.instance.ref('users/$psuId');
-        final snapshot = await ref.get();
-        if (snapshot.exists) {
-          final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
-          
-          double intake = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
-          int dailyGoal = int.tryParse(data['daily_goal']?.toString() ?? "2000") ?? 2000; 
-          
-          final now = DateTime.now();
-          
-          if (now.hour >= 14 && intake < dailyGoal) {
-             int kulang = dailyGoal - intake.toInt();
-             await NotificationScheduler.showInstantNotification(
-                title: "H2O HUB Reminder 💧",
-                body: "Student, you have $kulang ml left to reach your ${dailyGoal}ml goal!",
-             );
+      // 🔥 SOLID GUARD 1: Para sa dynamic OneOffTask loop
+      bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
+      if (!isNotifEnabled) {
+        debugPrint("Workmanager skipped: Notifications are disabled by user.");
+        return Future.value(true);
+      }
+
+      final String? uid = prefs.getString('user_uid'); 
+
+      if (uid == null) {
+        debugPrint("Workmanager skipped: No saved user_uid found in SharedPreferences.");
+        return Future.value(true);
+      }
+
+      final ref = FirebaseDatabase.instance.ref('users/$uid');
+      final snapshot = await ref.get();
+      
+      int nextDelayMinutes = 60; 
+
+      if (snapshot.exists) {  
+        final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
+        
+        double intake = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
+        double lastSavedIntake = prefs.getDouble('last_background_intake') ?? 0;
+        
+        int userAge = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
+        String userGender = data['gender']?.toString() ?? "Male";
+        
+        int dailyGoal = _calculateWorkmanagerDOHGoal(userAge, userGender).toInt(); 
+
+        if (intake <= lastSavedIntake) {
+          if (intake < dailyGoal) {
+            int kulang = dailyGoal - intake.toInt();
+            await NotificationScheduler.showInstantNotification(
+              title: "H2O HUB Reminder 💧",
+              body: "Student, you have $kulang ml left to reach your ${dailyGoal}ml goal! Dispense now at the nearest campus hub.",
+            );
           }
+          nextDelayMinutes = 30; 
+        } else {
+          await prefs.setDouble('last_background_intake', intake); 
+          nextDelayMinutes = 60; 
         }
       }
+
+      await Workmanager().registerOneOffTask(
+        "h2o_dynamic_task_${DateTime.now().millisecondsSinceEpoch}", 
+        "h2o_hydration_task",
+        initialDelay: Duration(minutes: nextDelayMinutes), 
+        constraints: Constraints(
+          networkType: NetworkType.connected, 
+        ),
+      );
+
     } catch (e) {
       debugPrint("Workmanager Error: $e");
     }
@@ -75,59 +115,35 @@ void onStart(ServiceInstance service) async {
   service.on('stopService').listen((event) => service.stopSelf());
 
   try {
+    final user = FirebaseAuth.instance.currentUser;
+    String? uid = user?.uid;
+
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? psuId = prefs.getString('user_psu_id'); // Binago mula user_uid -> user_psu_id
+    if (uid == null) {
+      uid = prefs.getString('user_uid'); 
+    }
 
-    if (psuId != null) {
-      DatabaseReference dbRef = FirebaseDatabase.instance.ref().child('users/$psuId');
-      dbRef.onValue.listen((event) {
+    if (uid != null) {
+      DatabaseReference dbRef = FirebaseDatabase.instance.ref().child('users/$uid');
+
+      dbRef.onValue.listen((event) async {
+        // 🔥 SOLID GUARD 2: Bago mag-trigger ang popup ng barya, i-reload at tingnan muna kung naka-ON ang switch
+        await prefs.reload();
+        bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
+        if (!isNotifEnabled) return; // 🛑 Kapag naka-OFF ang switch, block agad ang alert.
+
         if (event.snapshot.value != null) {
-          final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+          final userData = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
           
-          // Kung habang tumatakbo ang background service ay nakitang na-reset ng admin, ihinto ang notif checking
-          if (data['status'] == 'Password Reset by Admin') return;
+          bool isScanning = userData['is_scanning'] == true;
+          bool coinTrigger = userData['coin_trigger'] == true;
+          int amount = int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
 
-          bool isScanning = data['is_scanning'] == true;
-          bool coinTrigger = data['coin_trigger'] == true;
-          int amount = int.tryParse(data['last_credits']?.toString() ?? "0") ?? 0;
-
-          // 1. ORIGINAL CREDIT NOTIFICATION
           if (isScanning && !coinTrigger && amount > 0) {
             NotificationScheduler.showInstantNotification(
               title: "Credits Received! ✅",
               body: "PHP $amount.00 detected. Click DISPENSE in the app.",
             );
-          }
-
-          // 2. SMART HYDRATION LOGIC WITH SCHOOL HOURS
-          String? lastDrink = data['last_drink_time'];
-          double intake = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
-          int dailyGoal = int.tryParse(data['daily_goal']?.toString() ?? "2000") ?? 2000;
-
-          if (intake >= dailyGoal) return;
-
-          final now = DateTime.now();
-          if (now.hour < 7 || now.hour >= 19) return; 
-
-          if (lastDrink != null) {
-            DateTime lastTime = DateTime.parse(lastDrink);
-            Duration diff = now.difference(lastTime);
-
-            if (diff.inMinutes == 60) {
-              NotificationScheduler.showInstantNotification(
-                title: "H2O HUB: Time to Hydrate! 💧",
-                body: "It's been 1 hour since your last drink. Stay hydrated, Student!",
-              );
-            } 
-            else if (diff.inMinutes > 60) {
-              int extraMinutes = diff.inMinutes - 60;
-              if (extraMinutes % 30 == 0) {
-                NotificationScheduler.showInstantNotification(
-                  title: "H2O HUB: Still thirsty? 🥤",
-                  body: "Stay on track with your goal! Don't forget to refill.",
-                );
-              }
-            }
           }
         }
       });
@@ -188,13 +204,31 @@ void main() async {
 
     await Workmanager().initialize(callbackDispatcher, isInDebugMode: kDebugMode);
     
+    // 🔥 SOLID GUARD 3: I-check kung disabled ang notif bago i-register ang periodic 2-minute task pagkabukas ng app
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
+
+    if (isNotifEnabled) {
+      await Workmanager().registerPeriodicTask(
+        "h2o_hydration_periodic_id", 
+        "h2o_periodic_task",          
+        frequency: const Duration(minutes: 2), 
+        initialDelay: const Duration(minutes: 2), 
+        constraints: Constraints(
+          networkType: NetworkType.connected, 
+        ),
+      );
+    } else {
+      // Kung naka-OFF na nung huling sara ng app, siguraduhing burado ang nakasalang na task
+      await Workmanager().cancelAll();
+    }
+    
     await initializeBackgroundService();
 
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && user.email != null) {
-      final prefs = await SharedPreferences.getInstance();
       String psuId = user.email!.split('@')[0];
-      await prefs.setString('user_psu_id', psuId); // Sinisave na natin ang PSU ID imbis na UID
+      await prefs.setString('user_psu_id', psuId); 
     }
   }
 
@@ -224,17 +258,19 @@ class H2OApp extends StatelessWidget {
           if (snapshot.hasData) {
             if (kIsWeb) return const AdminDashboard();
 
-            // KUNG MOBILE APP: Suriin kung galing sa reset ang status bago tuluyang papasukin sa Dashboard
-            String psuId = snapshot.data!.email!.split('@')[0];
+            String uid = snapshot.data!.uid;
+            
+            SharedPreferences.getInstance().then((prefs) {
+              prefs.setString('user_uid', uid); 
+            });
             
             return FutureBuilder<DataSnapshot>(
-              future: FirebaseDatabase.instance.ref().child('users/$psuId/status').get(),
+              future: FirebaseDatabase.instance.ref().child('users/$uid/status').get(),
               builder: (context, statusSnapshot) {
                 if (statusSnapshot.connectionState == ConnectionState.waiting) {
                   return const Scaffold(body: Center(child: CircularProgressIndicator()));
                 }
                 
-                // Kapag napansin na 'Password Reset by Admin' pala ang tag sa database, pilitin mag log-out
                 if (statusSnapshot.hasData && statusSnapshot.data!.value == 'Password Reset by Admin') {
                   FirebaseAuth.instance.signOut();
                   return const LoginPage();

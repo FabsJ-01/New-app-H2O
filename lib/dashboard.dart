@@ -23,6 +23,7 @@ class _DashboardState extends State<Dashboard> {
   int age = 19;
   bool _isMachineReady = false; 
   String? localUid;
+  bool _notificationsEnabled = true; 
 
   final DatabaseReference _dbRef = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
@@ -34,10 +35,11 @@ class _DashboardState extends State<Dashboard> {
     super.initState();
     _loadOfflineData();
     _activateListeners();
-    NotificationScheduler.scheduleDailyReminders();
   }
 
   Future<void> _sendNotification(String title, String body) async {
+    if (!_notificationsEnabled) return; 
+    
     await NotificationScheduler.showInstantNotification(
       title: title,
       body: body,
@@ -45,19 +47,45 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Future<void> _loadOfflineData() async {
-  final SharedPreferences prefs = await SharedPreferences.getInstance();
-  final user = FirebaseAuth.instance.currentUser;
-  
-  if (user != null) {
-    await prefs.setString('user_uid', user.uid); // Importante ito para sa background service
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final user = FirebaseAuth.instance.currentUser;
+    
+    if (user != null) {
+      await prefs.setString('user_uid', user.uid); 
+    }
+
+    setState(() {
+      intakeDisplay = prefs.getDouble('last_intake') ?? 0.0;
+      localUid = prefs.getString('user_uid') ?? user?.uid;
+      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true; 
+    });
+
+    if (_notificationsEnabled) {
+      NotificationScheduler.scheduleDailyReminders();
+    } else {
+      NotificationScheduler.cancelAllReminders(); 
+    }
   }
 
-  setState(() {
-    intakeDisplay = prefs.getDouble('last_intake') ?? 0.0;
-    localUid = prefs.getString('user_uid') ?? user?.uid;
-    // ... rest of your code
-  });
-}
+  Future<void> _toggleNotifications(bool value) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _notificationsEnabled = value;
+    });
+    await prefs.setBool('notifications_enabled', value);
+
+    if (value) {
+      NotificationScheduler.scheduleDailyReminders();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("H2O Reminders: ON 💧"), backgroundColor: Colors.green),
+      );
+    } else {
+      await NotificationScheduler.cancelAllReminders(); 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("H2O Reminders: OFF 🔕 (Notifications paused)"), backgroundColor: Colors.orange),
+      );
+    }
+  }
 
   void _showQRDialog() {
     final displayUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
@@ -101,18 +129,16 @@ class _DashboardState extends State<Dashboard> {
   }
 
   void _checkAndResetDailyIntake(String uid, Map data) async {
-  String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-  
-  // INAYOS: Binago mula 'last_update' patungong 'update' para tugma sa Firebase ninyo
-  String lastUpdate = data['update']?.toString() ?? "";
-  
-  if (today != lastUpdate) {
-    await _dbRef.child('users/$uid').update({
-      'intake': 0,
-      'update': today, // INAYOS: 'update' na rin ang isusulat sa database
-    });
+    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    String lastUpdate = data['update']?.toString() ?? "";
+    
+    if (today != lastUpdate) {
+      await _dbRef.child('users/$uid').update({
+        'intake': 0,
+        'update': today, 
+      });
+    }
   }
-}
 
   void _activateListeners() {
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
@@ -134,12 +160,28 @@ class _DashboardState extends State<Dashboard> {
             _isMachineReady = data['coin_trigger'] == false && data['is_scanning'] == true;
           });
 
-          // Notif kapag uminom
-          if (intakeDisplay > oldIntake && oldIntake != 0) {
+          if (intakeDisplay > oldIntake) {
               _sendNotification("H2O Success! ✨", "Thank you for using PSU H2O. Stay Hydrated!");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text("Thank you for using PSU H2O. Stay Hydrated! 💧"),
+                  backgroundColor: Colors.blue[900],
+                ),
+              );
           }
 
-          // DITO YUNG DAGDAG: Notif with Amount (Barya)
+          bool isScanning = data['is_scanning'] == true;
+          bool coinTrigger = data['coin_trigger'] == true;
+          
+          if (wasReady && !isScanning && !coinTrigger) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Session ended. Device is ready for the next user. 📇"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+
           if (!wasReady && _isMachineReady) {
             int amount = int.tryParse(data['last_credits']?.toString() ?? "0") ?? 0;
             _sendNotification(
@@ -179,7 +221,19 @@ class _DashboardState extends State<Dashboard> {
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
-                const SizedBox(height: 30),
+                // 🔥 DAGDAG: "Hydration Monitoring" Title right at the top
+                const SizedBox(height: 25),
+                Text(
+                  "Hydration Monitoring",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[900],
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
                 CircularPercentIndicator(
                   radius: 110.0,
                   lineWidth: 18.0,
@@ -256,6 +310,36 @@ class _DashboardState extends State<Dashboard> {
                     style: TextStyle(fontSize: 13, color: Colors.blue[900]),
                   ),
                 ),
+                
+                const SizedBox(height: 15),
+
+                // Toggle Switch nananatili sa saktong pwesto sa baba
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 30),
+                  decoration: BoxDecoration(
+                    color: _notificationsEnabled ? Colors.blue.shade50 : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: _notificationsEnabled ? Colors.blue.shade100 : Colors.grey.shade300)
+                  ),
+                  child: SwitchListTile(
+                    title: Text(
+                      _notificationsEnabled ? "Campus Alerts Active" : "Alerts Paused (At Home)",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        color: _notificationsEnabled ? Colors.blue.shade900 : Colors.grey.shade700
+                      ),
+                    ),
+                    subtitle: const Text("Turn off if you are away from the campus hub"),
+                    value: _notificationsEnabled,
+                    secondary: Icon(
+                      _notificationsEnabled ? Icons.notifications_active : Icons.notifications_off,
+                      color: _notificationsEnabled ? Colors.blue.shade800 : Colors.grey,
+                    ),
+                    activeColor: Colors.blue.shade900,
+                    onChanged: _toggleNotifications,
+                  ),
+                ),
+                const SizedBox(height: 30),
               ],
             ),
           ),
