@@ -72,7 +72,10 @@ The peripheral hardware platform deployed across campus hubs to capture water co
 
 ---
 ## 👥 Project Team
-* **Developer**: James Eagan Pulusan Fabian -
+* **PROGRAMMER & HARDWARE/SYSTEM ANALYST**: James Eagan Pulusan Fabian -
+* **DOCU/RESEARCHER**: Dannylyn Roque, Adrianne Limongco, John Hazelle Apelado
+* **Hardware Analyst/System Analyst**: Edmund Manalansan
+* **Frontend Designer**: John Paul Ruiz
 * **Institution**: Pampanga State University - Lubao Campus
 
 ---
