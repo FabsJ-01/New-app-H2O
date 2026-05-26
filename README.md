@@ -2,77 +2,78 @@
 **Smart Campus Hydration Monitoring System**
 
 ## 📖 Introduction
-**H2O HUB** is an integrated solution designed for hydration monitoring of students at the **PSU Lubao Campus**. It combines IoT hardware, a feature-rich mobile application, and a Web Admin Dashboard for the centralized management of hydration data and system devices.
+**H2O HUB** is an integrated IoT-driven solution designed for precision hydration monitoring of students at the **PSU Lubao Campus**. It seamlessly combines customized embedded hardware, a feature-rich cross-platform mobile application, and a Web Admin Dashboard to establish a centralized ecosystem for real-time hydration telemetry and system node management.
 
 ---
 
-## 📱 Mobile App Full Functionality
-Students interact with the mobile application to track their daily hydration progress:
+## 📱 Mobile App Core Functionalities
+Students interact with the Flutter-based mobile application to monitor their biological hydration benchmarks and securely access campus hydration nodes:
 
-*   **User Authentication**: A secure registration and login system for students.
-*   **Real-time Hydration Dashboard**: 
-    *   Visual tracking of water intake using the `percent_indicator` package.
-    *   The database updates in real-time based on consumption from the dispenser.
-*   **QR Code Integration**: 
-    *   Features a built-in `mobile_scanner` for quick user identification at every H2O HUB station.
-*   **Firebase Sync**: A seamless cloud connection ensures that student intake records are always updated.
+* **User Authentication**: A secure, persistent authentication system mapped directly to the student's unique institutional credentials.
+* **Real-time Hydration Dashboard**: 
+    * **Dynamic Title UI**: Displays a clean "Hydration Monitoring" structural header for proper visual telemetry tracking.
+    * **Visual Metric Tracking**: Leverages the `percent_indicator` architecture to render real-time progression vectors against strict biological fluid demands.
+    * **Automated Reset Engine**: Detects calendar day crossovers via internal timestamping vectors to programmatically flush data blocks and reset student intake attributes to `0ml` daily.
+* **QR Code Integration**: 
+    * Utilizes a built-in `mobile_scanner` framework to generate a high-density, unique user authentication QR code bound to the student's background record, enabling rapid handshake validation at physical campus hub sub-stations.
+* **Firebase Synchronization**: Continuous, asynchronous state synchronization via non-blocking data streams ensures immediate alignment between local app interfaces and cloud record layers.
 
 ---
 
-## ⚙️ How Workmanager Works (Background Logic)
-The **Workmanager** serves as the "intelligent engine" that handles notifications even when the app is not in use:
+## ⚙️ Background Processing & Dual-Engine Architecture
+The application runs a specialized, fault-tolerant background architecture optimized for Android's OS limits to process alerts and monitor peripheral system status without continuous foreground persistence:
 
-1.  **Periodic Task**: The app runs a background task every **15 minutes** (standard Android interval for battery optimization).
-2.  **Remote Data Check**: The system triggers the Workmanager to connect to the **Firebase Realtime Database** to read the user's current `intake` level.
-3.  **Smart Decision Logic**: 
-    *   **Time Check**: Verifies if the current time is **2:00 PM (14:00)** onwards.
-    *   **Volume Check**: Verifies if the intake volume is still below the **2000ml** threshold.
-4.  **Notification Trigger**: 
-    ```dart
-    if (currentTime >= 14 && currentIntake < 2000) {
-      // Sends a custom hydration reminder notification.
-    }
+### 1. Dynamic Hydration Engine (Workmanager Task Layer)
+Driven by the `Workmanager` API, this mechanism operates as an automated state-loop executing structural logic cycles across changing time gaps:
+* **Dynamic DOH Algorithm Validation**: Rather than enforcing fixed generic quotas, the system dynamically shifts target volume thresholds by processing the target user's profile metadata against official **Department of Health (DOH) Guidelines**:
+    * *Ages 19–59*: Males = `3000ml` | Females = `2300ml`
+    * *Ages 16–18*: Males = `2600ml` | Females = `2200ml`
+    * *Ages 13–15*: Males = `2400ml` | Females = `2100ml`
+* **Recursive Scheduling Framework**: The background controller evaluates current intake metrics against the calculated DOH profile benchmark:
+    * **Stagnant Intake State**: If water intake fails to advance past the previously recorded volume data block, the runtime environment fires an instant localized reminder and schedules an aggressive **30-minute high-frequency alert cycle** to prompt hydration.
+    * **Active Progress State**: Upon successful data increment detection, the background engine adjusts the process timing back to a standard **60-minute interval loop** to reduce operating overhead.
+* **Global Standby Toggle (Campus Alerts Guard)**: Features a centralized state listener tied directly to `SharedPreferences`. When the user toggles the UI switch component to active suspension (e.g., *Alerts Paused / At Home*), the engine aborts network fetches instantly, suspending notification processes completely to safeguard device runtime resources.
+
+### 2. Hardware Event Monitor (Foreground Service Layer)
+Driven by the `flutter_background_service` package, this framework runs a persistent low-overhead background thread designed to manage hardware handshakes:
+* **Real-time Coin Hardware Hook**: Listens directly to live changes inside the specific Firebase node path (`users/$uid`).
+* **Verification Event Handling**: When the hardware architecture flags physical currency validation (`is_scanning: true`, `coin_trigger: false`, `last_credits > 0`), the background handler overrides system sleep states to push an immediate alert notification:
+    ```text
+    Title: Credits Received! ✅
+    Body: PHP [X].00 detected. Click DISPENSE in the app.
     ```
 
 ---
 
 ## 🖥️ Web Admin Dashboard (The Control Center)
-A centralized platform for system operation, monitoring, and maintenance:
+A multi-tenant administrative workstation designed for device diagnostics, auditing, and maintenance operations:
 
-*   **Water Level Monitoring**: Provides real-time status of the dispenser's water level for refill management.
-*   **Device Management**: Monitors the connectivity and status of all IoT devices (Orange Pi) across the campus.
-*   **User Management**: 
-    *   Provides a total list of registered students.
-    *   Allows administrators to delete inactive users to maintain database integrity.
+* **Liquid Mass Auditing**: Captures continuous level telemetry from field-deployed tanks to streamline station maintenance scheduling.
+* **Node Integrity Monitoring**: Aggregates heartbeats and connection metrics from distributed edge controllers located throughout the campus.
+* **Database Sanitization**: Provides administrative vectors to flush inactive nodes, manage credential structures, and enforce compliance resets across the system network.
 
 ---
 
 ## 🛠️ Hardware Architecture
-The physical components integrated to track water consumption:
-*   **Controller**: **Orange Pi Zero 3**.
-*   **Sensors**: 
-    *   **YF-S401 Water Flow Sensor**: Measures the precise volume of water dispensed.
-    *   **HC-SR04 Ultrasonic Sensor**: Used for user or bottle detection.
-*   **System Logic**: Python scripts (`main.py`) interface between the sensors and the Firebase Cloud.
+The peripheral hardware platform deployed across campus hubs to capture water consumption metrics:
+* **Edge Compute Module**: High-performance microcontroller and single-board compute architectures (ESP32-S3 / Mini PC infrastructure) executing unified device logic.
+* **Sensor Array Sub-system**: 
+    * **YF-S401 Water Flow Sensor**: A high-precision hall-effect turbine system that translates rotational mechanical motion into distinct pulse counts for exact metric volume computation.
+    * **Proximity Tracking Suite**: Incorporates ultrasonic (`HC-SR04`) and capacitive proximity matrices to validate vessel alignment prior to fluid deployment.
+* **System Middleware Integration**: Python system routines execute native low-level sensor analysis and act as a reliable transmission interface to pipe data to the cloud architecture.
 
 ---
 
-## 🎨 Branding & Customization
-*   **Official Icon**: The application features a custom **H2O HUB Logo**.
-*   **Implementation**: Utilized `flutter_launcher_icons` to generate adaptive icons for professional mobile standards.
-*   **Asset Path**: `assets/images/logo.png`.
+## 📂 System File Map Overview
+* `/lib/main.dart`: Contains system bootstrap logic, dynamic background service task loops, and global notification dispatcher hooks.
+* `/lib/dashboard.dart`: Provides the interactive telemetry dashboard interface, dynamic title indicators, percent visualizations, and the global alert toggle controller.
+* `/lib/notification_scheduler.dart`: Low-level wrapper logic interface handling native Android notification channel registers and payload construction.
+* `/lib/profile_page.dart`: Interface managing student physical criteria values used by the DOH computation routine.
 
 ---
-
-## 📂 Project Structure
-*   `/lib/main.dart`: Entry point and background service configuration.
-*   `/lib/admin_register.dart`: UI for user registration and management.
-*   `/assets/images/`: Storage for branding assets and the official logo.
-
 ## 👥 Project Team
-*   **Developer**: James Eagan Pulusan Fabian
-**Hardware/Analysis** James Fabian
-*   **Campus**: Pampanga State University - Lubao Campus
+* **Developer**: James Eagan Pulusan Fabian -
+* **Institution**: Pampanga State University - Lubao Campus
 
 ---
-*Generated for the H2O HUB Development Project - 2026.*
+*Documented for the H2O HUB System Architecture Defense - 2026.*
