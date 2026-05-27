@@ -26,7 +26,7 @@ class _OverviewPageState extends State<OverviewPage> {
 
   @override
   void dispose() {
-    _midnightTimer?.cancel(); // Nililinis ang timer kapag umalis sa page para walang memory leak
+    _midnightTimer?.cancel();
     super.dispose();
   }
 
@@ -38,13 +38,10 @@ class _OverviewPageState extends State<OverviewPage> {
     final tomorrow = DateTime(now.year, now.month, now.day + 1);
     final timeUntilMidnight = tomorrow.difference(now);
 
-    // Mag-ti-trigger eksakto pagpatak ng 12:00 AM para i-clear ang counter kahit walang user interaction
     _midnightTimer = Timer(timeUntilMidnight, () {
       if (mounted) {
-        setState(() {
-          // Rebuilds the UI, which updates _todayDate and resets the visible count to 0
-        });
-        _scheduleMidnightReset(); // I-set up muli para sa susunod na hatinggabi
+        setState(() {});
+        _scheduleMidnightReset();
       }
     });
   }
@@ -77,7 +74,7 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
-  // --- AUTHORIZED DELETE DIALOG (LOGIN PASSWORD CONFIRMATION) ---
+  // --- AUTHORIZED DELETE DIALOG ---
   void _showDeleteDialog(String id, String name) {
     final TextEditingController passwordController = TextEditingController();
     bool isPasswordVisible = false;
@@ -147,7 +144,6 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
-  // Re-usable SnackBar
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -155,7 +151,6 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
-  // Custom Confirmation Dialog (Force Dispense / Refill)
   void _showConfirmDialog({
     required String title,
     required String content,
@@ -201,9 +196,12 @@ class _OverviewPageState extends State<OverviewPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Realtime Vendo Monitoring", 
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const Text(
+            "Realtime Vendo Monitoring", 
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 30),
+          
           StreamBuilder(
             stream: _dbRef.child('vendos').onValue,
             builder: (context, snapshot) {
@@ -232,11 +230,14 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
+  // --- VENDO CARD BUILDER ---
   Widget _buildVendoMonitorCard(String id, Map<dynamic, dynamic> data) {
     String name = data['name'] ?? "Unknown Vendo";
     int waterLevel = data['water_level'] ?? 0;
     String status = data['wifi_status'] ?? "Offline";
     bool isOnline = status == "Connected";
+    
+    // Binabasa ang realtime na value mula sa DB kung may laman, default ay 200ml
     int mlPerPeso = (data['settings'] != null) ? (data['settings']['ml_per_peso'] ?? 200) : 200;
 
     return Card(
@@ -282,7 +283,6 @@ class _OverviewPageState extends State<OverviewPage> {
             _buildPricingConfig(id, mlPerPeso),
             const SizedBox(height: 20),
             
-            // INAYOS NA LAYOUTBUILDER: Nilagyan ng IntrinsicHeight para maging pantay-pantay ang taas ng mga blocks nang walang overflow aror
             LayoutBuilder(
               builder: (context, constraints) {
                 bool isCompact = constraints.maxWidth < 550;
@@ -401,9 +401,7 @@ class _OverviewPageState extends State<OverviewPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text("Pricing Config", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-          
-          // INAYOS NA ROW CONTROLS: Nilagyan ng Flexible at FittedBox para hindi mag-overflow sa CP
+          const Text("Dispense Calibration", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
           Flexible(
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -413,7 +411,9 @@ class _OverviewPageState extends State<OverviewPage> {
                   constraints: const BoxConstraints(),
                   icon: const Icon(Icons.remove_circle_outline, color: Colors.orange), 
                   onPressed: () {
-                    if (mlPerPeso > 10) _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 10);
+                    if (mlPerPeso > 10) {
+                      _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 10);
+                    }
                   },
                 ),
                 const SizedBox(width: 8),
@@ -421,7 +421,7 @@ class _OverviewPageState extends State<OverviewPage> {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      "$mlPerPeso ml / ₱1", 
+                      "Volume: $mlPerPeso / ₱1", 
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -432,7 +432,9 @@ class _OverviewPageState extends State<OverviewPage> {
                   constraints: const BoxConstraints(),
                   icon: const Icon(Icons.add_circle_outline, color: Colors.orange), 
                   onPressed: () {
-                    if (mlPerPeso < 1000) _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 10);
+                    if (mlPerPeso < 1000) {
+                      _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 10);
+                    }
                   },
                 ),
               ],
@@ -444,7 +446,6 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   Widget _buildQuickStat(String label, String value, IconData icon, Color color) {
-    // TINANGGAL ANG FIX HEIGHT AT BINIGYAN NG PADDING: Para kusang sumunod ang taas depende sa sukat ng text nang hindi nagkakaroon ng overflow bar
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),

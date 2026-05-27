@@ -70,7 +70,7 @@ void callbackDispatcher() {
         
         int dailyGoal = _calculateWorkmanagerDOHGoal(userAge, userGender).toInt(); 
 
-        if (intake <= lastSavedIntake) {
+        if (intake <= lastSavedIntake) {  
           if (intake < dailyGoal) {
             int kulang = dailyGoal - intake.toInt();
             await NotificationScheduler.showInstantNotification(
@@ -204,7 +204,6 @@ void main() async {
 
     await Workmanager().initialize(callbackDispatcher, isInDebugMode: kDebugMode);
     
-    // 🔥 SOLID GUARD 3: I-check kung disabled ang notif bago i-register ang periodic 2-minute task pagkabukas ng app
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
 
@@ -212,7 +211,7 @@ void main() async {
       await Workmanager().registerPeriodicTask(
         "h2o_hydration_periodic_id", 
         "h2o_periodic_task",          
-        frequency: const Duration(minutes: 2), 
+        frequency: const Duration(hours: 1), 
         initialDelay: const Duration(minutes: 2), 
         constraints: Constraints(
           networkType: NetworkType.connected, 

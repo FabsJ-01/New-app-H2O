@@ -30,7 +30,7 @@ class _RegisterPageState extends State<RegisterPage> {
   
   // MGA LISTAHAN PARA SA AKADEMIKONG DETALYE
   final List<String> years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-  final List<String> courses = ['Bachelor of Science in Information Technology', 'Bachelor of Science in Accountancy', 'Bachelor of Science in Civil Engineering', 'Bachelor of Elementary Education', 'Bachelor of Science in Tourism Management']; // Pwede mong dagdagan o palitan ang mga kurso rito sa PSU
+  final List<String> courses = ['Bachelor of Science in Information Technology', 'Bachelor of Science in Accountancy', 'Bachelor of Science in Civil Engineering', 'Bachelor of Elementary Education', 'Bachelor of Science in Tourism Management', 'Bachelor of Science in Business Administration','Bachelor of Science in Psychology']; // Pwede mong dagdagan o palitan ang mga kurso rito sa PSU
 
   String? validatePassword(String value) {
     if (value.length < 8) return "At least 8 characters required";
@@ -121,7 +121,7 @@ class _RegisterPageState extends State<RegisterPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Account Created! Babalik na sa Login..."), 
+            content: Text("Account Created! Back to Login..."), 
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
@@ -135,9 +135,9 @@ class _RegisterPageState extends State<RegisterPage> {
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) Navigator.pop(context);
-      String errorMessage = "Mali ang impormasyon.";
-      if (e.code == 'email-already-in-use') errorMessage = "Ang ID na ito ay rehistrado na.";
-      if (e.code == 'weak-password') errorMessage = "Masyadong mahina ang password.";
+      String errorMessage = "Wrong information provided.";
+      if (e.code == 'email-already-in-use') errorMessage = "Wrong PSU ID Already in Use.";
+      if (e.code == 'weak-password') errorMessage = "weak-password: Password should be at least 8 characters.";
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
@@ -234,7 +234,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 textCapitalization: TextCapitalization.characters, 
                 decoration: const InputDecoration(
                   labelText: "Section", 
-                  hintText: "e.g. A, B, or 1-1",
+                  hintText: "A, B, C, etc.",
                   border: OutlineInputBorder(), 
                   prefixIcon: Icon(Icons.class_),
                 ),

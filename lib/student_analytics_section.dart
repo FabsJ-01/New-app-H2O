@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'leaderboard_detail_page.dart'; // Siguraduhing naka-import ito para sa navigation
 
 class StudentAnalyticsSection extends StatelessWidget {
   final Map<dynamic, dynamic> logsData;
@@ -20,14 +21,12 @@ class StudentAnalyticsSection extends StatelessWidget {
         String timestampStr = value['timestamp'] ?? '';
         double liters = amountMl / 1000.0;
 
-        // Kung walang nakuhang course/section/year sa lumang log, bibigyan natin ng malinis na default string
         String fullCourse = value['course'] ?? '';
         String section = value['section'] ?? '';
         String year = value['year'] ?? '';
 
-        // Kung walang kurso, ibig sabihin luma o hindi naka-register nang maayos ang log
         if (fullCourse.isEmpty) {
-          fullCourse = "Unregistered / Guest";
+          fullCourse = "Faculty / Utility Officer";
         }
 
         // Pag-ikli ng pangalan ng kurso para kasya sa UI cards
@@ -42,7 +41,7 @@ class StudentAnalyticsSection extends StatelessWidget {
           courseCode = "BSED";
         }
 
-        // --- REQ 1 & 3: DAILY BREAKDOWN & FREQUENCY (IN-PLACE REPLACEMENT) ---
+        // --- REQ 1 & 3: DAILY BREAKDOWN & FREQUENCY ---
         try {
           DateTime logDate = DateTime.parse(timestampStr);
           if (logDate.year == ngayon.year && 
@@ -54,7 +53,6 @@ class StudentAnalyticsSection extends StatelessWidget {
               groupKey = "Guest / Unknown";
             } else {
               groupKey = "$courseCode ${year.replaceAll(' Year', '')} - $section".trim(); 
-              // Magiging: "BSIT 3rd - 3C" para hindi masyadong mahaba
             }
             dailySectionFrequency[groupKey] = (dailySectionFrequency[groupKey] ?? 0) + 1;
           }
@@ -81,6 +79,97 @@ class StudentAnalyticsSection extends StatelessWidget {
     var sortedMonthlyVolume = monthlyCourseVolume.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
+    // Dito natin malalaman kung mobile view o desktop/web screen view
+    double screenWidth = MediaQuery.of(context).size.width;
+    bool isMobile = screenWidth < 750;
+
+    // 1. Gagawa muna tayo ng widgets para sa dalawang magkaibang card
+    Widget dailyFrequencyCard = _buildAnalyticsCard(
+      title: "Today's Active Groups",
+      subtitle: "Daily breakdown of usage per section",
+      icon: Icons.today_rounded,
+      iconColor: Colors.blue,
+      child: sortedDailyFrequency.isEmpty
+          ? _buildEmptyState("No logs recorded for today yet.")
+          : ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sortedDailyFrequency.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                var entry = sortedDailyFrequency[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      "${entry.value} Dispenses",
+                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+
+    Widget monthlyLeaderboardCard = _buildAnalyticsCard(
+      title: "Monthly Top Course Leaderboard",
+      subtitle: "Total water consumption volume this month",
+      icon: Icons.leaderboard_rounded,
+      iconColor: Colors.orange,
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const LeaderboardDetailPage()),
+        );
+      },
+      child: sortedMonthlyVolume.isEmpty
+          ? _buildEmptyState("No data gathered for this month.")
+          : Column(
+              children: [
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: sortedMonthlyVolume.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    var entry = sortedMonthlyVolume[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.orange.withOpacity(0.1),
+                        child: Text("#${index + 1}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                      ),
+                      title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      trailing: Text(
+                        "${entry.value.toStringAsFixed(2)} L",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF334155)),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 15),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      "View Full Analytics",
+                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    SizedBox(width: 5),
+                    Icon(Icons.arrow_forward_ios_rounded, color: Colors.orange, size: 14),
+                  ],
+                )
+              ],
+            ),
+    );
+
+    // 2. Responsive Check: Kung mobile, ipatong (Column). Kung desktop, itabi (Row) gamit ang Expanded.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4.0),
       child: Column(
@@ -92,81 +181,23 @@ class StudentAnalyticsSection extends StatelessWidget {
           ),
           const SizedBox(height: 15),
           
-          // Responsive layout gamit ang Row para magkatabi silang dalawa gaya ng standard web dashboard
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // KARD NG DAILY BREAKDOWN AT FREQUENCY
-              Expanded(
-                child: _buildAnalyticsCard(
-                  title: "Today's Active Groups & Frequency",
-                  subtitle: "Daily breakdown of usage per section",
-                  icon: Icons.today_rounded,
-                  iconColor: Colors.blue,
-                  child: sortedDailyFrequency.isEmpty
-                      ? _buildEmptyState("No logs recorded for today yet.")
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: sortedDailyFrequency.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            var entry = sortedDailyFrequency[index];
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                              trailing: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  "${entry.value} Dispenses",
-                                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ),
-              const SizedBox(width: 20),
-              
-              // KARD NG MONTHLY TOP COURSE
-              Expanded(
-                child: _buildAnalyticsCard(
-                  title: "Monthly Top Course Leaderboard",
-                  subtitle: "Total water consumption volume this month",
-                  icon: Icons.leaderboard_rounded,
-                  iconColor: Colors.orange,
-                  child: sortedMonthlyVolume.isEmpty
-                      ? _buildEmptyState("No data gathered for this month.")
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: sortedMonthlyVolume.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            var entry = sortedMonthlyVolume[index];
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.orange.withOpacity(0.1),
-                                child: Text("#${index + 1}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                              ),
-                              title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                              trailing: Text(
-                                "${entry.value.toStringAsFixed(2)} L",
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF334155)),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ),
-            ],
-          ),
+          if (isMobile)
+            Column(
+              children: [
+                dailyFrequencyCard,
+                const SizedBox(height: 20),
+                monthlyLeaderboardCard,
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: dailyFrequencyCard),
+                const SizedBox(width: 20),
+                Expanded(child: monthlyLeaderboardCard),
+              ],
+            ),
         ],
       ),
     );
@@ -179,9 +210,9 @@ class StudentAnalyticsSection extends StatelessWidget {
     required IconData icon,
     required Color iconColor,
     required Widget child,
+    VoidCallback? onTap,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -193,29 +224,41 @@ class StudentAnalyticsSection extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: iconColor, size: 24),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          hoverColor: onTap != null ? Colors.orange.withOpacity(0.02) : Colors.transparent,
+          splashColor: onTap != null ? Colors.orange.withOpacity(0.05) : Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                    Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    Icon(icon, color: iconColor, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                          Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 15),
+                const Divider(),
+                const SizedBox(height: 10),
+                child,
+              ],
+            ),
           ),
-          const SizedBox(height: 15),
-          const Divider(),
-          const SizedBox(height: 10),
-          child,
-        ],
+        ),
       ),
     );
   }

@@ -37,6 +37,18 @@ class _DashboardState extends State<Dashboard> {
     _activateListeners();
   }
 
+  // Placeholder para sa stats function
+  void _showWeeklyStats() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Weekly Intake (7 Days)", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text("Dito lalabas ang iyong statistics report."),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("CLOSE"))],
+      ),
+    );
+  }
+
   Future<void> _sendNotification(String title, String body) async {
     if (!_notificationsEnabled) return; 
     
@@ -221,7 +233,6 @@ class _DashboardState extends State<Dashboard> {
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
-                // 🔥 DAGDAG: "Hydration Monitoring" Title right at the top
                 const SizedBox(height: 25),
                 Text(
                   "Hydration Monitoring",
@@ -296,24 +307,47 @@ class _DashboardState extends State<Dashboard> {
                   ),
                 ),
                 const SizedBox(height: 30),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  margin: const EdgeInsets.symmetric(horizontal: 30),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50], 
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.blue.shade100)
+
+                // Pinalit na DOH Goal design
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      "Goal: ${dailyGoal.toInt()}ml (DOH Guidelines for Age $age)",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.blue[900], fontWeight: FontWeight.w500),
+                    ),
                   ),
-                  child: Text(
-                    "Goal: ${dailyGoal.toInt()}ml Based on DOH guidelines for Age $age ($gender)",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: Colors.blue[900]),
+                ),
+
+                const SizedBox(height: 15),
+
+                // Bagong Stats Button
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: _showWeeklyStats,
+                      icon: const Icon(Icons.bar_chart),
+                      label: const Text("VIEW WEEKLY PROGRESS"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue[900],
+                        side: BorderSide(color: Colors.blue.shade200),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                    ),
                   ),
                 ),
                 
-                const SizedBox(height: 15),
+                const SizedBox(height: 20),
 
-                // Toggle Switch nananatili sa saktong pwesto sa baba
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 30),
                   decoration: BoxDecoration(
