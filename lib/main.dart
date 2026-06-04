@@ -20,12 +20,17 @@ import 'notification_scheduler.dart';
 import 'package:permission_handler/permission_handler.dart'; 
 
 // Pages
-import 'login_page.dart';         
-import 'dashboard.dart';           
-import 'admin_login.dart';        
-import 'admin_dashboard.dart';    
+import 'login_page.dart';        
+import 'dashboard.dart';         
+import 'admin_login.dart';       
+import 'admin_dashboard.dart';   
 
-// --- 1. WORKMANAGER CALLBACK ---
+// --- 1. HELPER: Time Restriction ---
+bool _isWithinActiveHours() {
+  final now = DateTime.now();
+  return now.hour >= 7 && now.hour < 19; // 7am to 7pm (19:00)
+}
+
 double _calculateWorkmanagerDOHGoal(int age, String gender) {
   if (age >= 19 && age <= 59) return (gender == "Male") ? 3000.0 : 2300.0;
   if (age >= 16 && age <= 18) return (gender == "Male") ? 2600.0 : 2200.0;
@@ -36,64 +41,56 @@ double _calculateWorkmanagerDOHGoal(int age, String gender) {
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    if (!_isWithinActiveHours()) return Future.value(true);
+
     try {
       await Firebase.initializeApp();
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       
-      // 🔥 SOLID GUARD 1: Para sa dynamic OneOffTask loop
       bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
-      if (!isNotifEnabled) {
-        debugPrint("Workmanager skipped: Notifications are disabled by user.");
-        return Future.value(true);
-      }
+      if (!isNotifEnabled) return Future.value(true);
 
       final String? uid = prefs.getString('user_uid'); 
-
-      if (uid == null) {
-        debugPrint("Workmanager skipped: No saved user_uid found in SharedPreferences.");
-        return Future.value(true);
-      }
+      if (uid == null) return Future.value(true);
 
       final ref = FirebaseDatabase.instance.ref('users/$uid');
       final snapshot = await ref.get();
       
-      int nextDelayMinutes = 60; 
+      int nextDelayMinutes = 20; // Default interval
 
       if (snapshot.exists) {  
         final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
-        
         double intake = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
         double lastSavedIntake = prefs.getDouble('last_background_intake') ?? 0;
-        
         int userAge = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
         String userGender = data['gender']?.toString() ?? "Male";
-        
         int dailyGoal = _calculateWorkmanagerDOHGoal(userAge, userGender).toInt(); 
-
-        if (intake <= lastSavedIntake) {  
+        
+        // LOGIC: Kung hindi nagbago ang intake, ibig sabihin hindi nag-dispense
+        if (intake <= lastSavedIntake) {
+          // Hindi nag-dispense: Bilisan ang reminder (30 minutes)
+          nextDelayMinutes = 15;
+          
           if (intake < dailyGoal) {
             int kulang = dailyGoal - intake.toInt();
             await NotificationScheduler.showInstantNotification(
               title: "H2O HUB Reminder 💧",
-              body: "Student, you have $kulang ml left to reach your ${dailyGoal}ml goal! Dispense now at the nearest campus hub.",
+              body: "Student, you have $kulang ml left! Dispense now at the nearest campus hub.",
             );
           }
-          nextDelayMinutes = 30; 
         } else {
-          await prefs.setDouble('last_background_intake', intake); 
-          nextDelayMinutes = 60; 
+          // Nag-dispense: Reset sa 60 minutes
+          nextDelayMinutes=20;
+          await prefs.setDouble('last_background_intake', intake);
         }
       }
 
       await Workmanager().registerOneOffTask(
-        "h2o_dynamic_task_${DateTime.now().millisecondsSinceEpoch}", 
+        "h2o_hydration_task", 
         "h2o_hydration_task",
         initialDelay: Duration(minutes: nextDelayMinutes), 
-        constraints: Constraints(
-          networkType: NetworkType.connected, 
-        ),
+        constraints: Constraints(networkType: NetworkType.connected),
       );
-
     } catch (e) {
       debugPrint("Workmanager Error: $e");
     }
@@ -117,34 +114,45 @@ void onStart(ServiceInstance service) async {
   try {
     final user = FirebaseAuth.instance.currentUser;
     String? uid = user?.uid;
-
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    if (uid == null) {
-      uid = prefs.getString('user_uid'); 
-    }
+    if (uid == null) uid = prefs.getString('user_uid'); 
 
     if (uid != null) {
       DatabaseReference dbRef = FirebaseDatabase.instance.ref().child('users/$uid');
-
       dbRef.onValue.listen((event) async {
-        // 🔥 SOLID GUARD 2: Bago mag-trigger ang popup ng barya, i-reload at tingnan muna kung naka-ON ang switch
-        await prefs.reload();
-        bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
-        if (!isNotifEnabled) return; // 🛑 Kapag naka-OFF ang switch, block agad ang alert.
+        if (event.snapshot.value == null) return;
+        final userData = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        
+        // 1. INSTANT GOAL REACHED CHECK
+        double intake = double.tryParse(userData['intake']?.toString() ?? "0") ?? 0;
+        int age = int.tryParse(userData['age']?.toString() ?? "19") ?? 19;
+        String gender = userData['gender']?.toString() ?? "Male";
+        int dailyGoal = _calculateWorkmanagerDOHGoal(age, gender).toInt();
 
-        if (event.snapshot.value != null) {
-          final userData = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-          
-          bool isScanning = userData['is_scanning'] == true;
-          bool coinTrigger = userData['coin_trigger'] == true;
-          int amount = int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
-
-          if (isScanning && !coinTrigger && amount > 0) {
-            NotificationScheduler.showInstantNotification(
-              title: "Credits Received! ✅",
-              body: "PHP $amount.00 detected. Click DISPENSE in the app.",
+        // Mag-check lang kung bago mag 6:00 PM (18:00)
+        final now = DateTime.now();
+        if (now.hour < 18) { 
+        if (intake >= dailyGoal) {
+        String todayKey = 'congrats_sent_${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
+        bool hasCongratulated = prefs.getBool(todayKey) ?? false;
+    
+          if (!hasCongratulated) {
+            await NotificationScheduler.showInstantNotification(
+              title: "Goal Reached! 🎉",
+              body: "Congratulations! You have reached your hydration goal for today.",
             );
+            await prefs.setBool(todayKey, true);
           }
+        }
+      }
+        // 2. INSTANT CREDITS CHECK
+        bool isScanning = userData['is_scanning'] == true;
+        int amount = int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
+        if (isScanning && amount > 0) {
+          await NotificationScheduler.showInstantNotification(
+            title: "Credits Received! ✅",
+            body: "PHP $amount.00 detected. Click DISPENSE in the app.",
+          );
         }
       });
     }
@@ -156,19 +164,14 @@ void onStart(ServiceInstance service) async {
 // --- 3. BACKGROUND SERVICE CONFIGURATION ---
 Future<void> initializeBackgroundService() async {
   final service = FlutterBackgroundService();
-  
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'h2o_notif_channel',
-    'H2O Service',
+    'h2o_notif_channel', 'H2O Service',
     description: 'Monitoring vending station...',
     importance: Importance.max, 
   );
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
-  await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+  await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
@@ -185,49 +188,44 @@ Future<void> initializeBackgroundService() async {
 }
 
 // --- 4. MAIN ENTRY POINT ---
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
+  // Ilabas natin ito sa 'if (!kIsWeb)' para hindi mag-error kung sakaling mag-restart
+  try {
+    FirebaseDatabase.instance.setPersistenceEnabled(true);
+  } catch (e) {
+    debugPrint("Persistence already enabled or not supported: $e");
+  }
+
   if (!kIsWeb) {
-    if (await Permission.notification.isDenied) {
-      await Permission.notification.request();
-    }
+    if (await Permission.notification.isDenied) await Permission.notification.request();
 
     t.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Manila'));
     
-    FirebaseDatabase.instance.setPersistenceEnabled(true);
-
     await NotificationScheduler.init(); 
 
     await Workmanager().initialize(callbackDispatcher, isInDebugMode: kDebugMode);
-    
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
+    await Workmanager().cancelAll();
 
-    if (isNotifEnabled) {
-      await Workmanager().registerPeriodicTask(
-        "h2o_hydration_periodic_id", 
-        "h2o_periodic_task",          
-        frequency: const Duration(hours: 1), 
-        initialDelay: const Duration(minutes: 2), 
-        constraints: Constraints(
-          networkType: NetworkType.connected, 
-        ),
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('notifications_enabled') ?? true) {
+      await Workmanager().registerOneOffTask(
+        "h2o_hydration_task", 
+        "h2o_hydration_task",
+        initialDelay: const Duration(minutes: 16), 
+        constraints: Constraints(networkType: NetworkType.connected),
       );
-    } else {
-      // Kung naka-OFF na nung huling sara ng app, siguraduhing burado ang nakasalang na task
-      await Workmanager().cancelAll();
     }
     
     await initializeBackgroundService();
 
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && user.email != null) {
-      String psuId = user.email!.split('@')[0];
-      await prefs.setString('user_psu_id', psuId); 
+      await prefs.setString('user_psu_id', user.email!.split('@')[0]); 
     }
   }
 
@@ -243,44 +241,27 @@ class H2OApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'H2O Smart Vending',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true, 
-      ),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true),
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
-          }
-          
+          if (snapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
           if (snapshot.hasData) {
             if (kIsWeb) return const AdminDashboard();
-
             String uid = snapshot.data!.uid;
-            
-            SharedPreferences.getInstance().then((prefs) {
-              prefs.setString('user_uid', uid); 
-            });
-            
+            SharedPreferences.getInstance().then((prefs) => prefs.setString('user_uid', uid));
             return FutureBuilder<DataSnapshot>(
               future: FirebaseDatabase.instance.ref().child('users/$uid/status').get(),
               builder: (context, statusSnapshot) {
-                if (statusSnapshot.connectionState == ConnectionState.waiting) {
-                  return const Scaffold(body: Center(child: CircularProgressIndicator()));
-                }
-                
+                if (statusSnapshot.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
                 if (statusSnapshot.hasData && statusSnapshot.data!.value == 'Password Reset by Admin') {
                   FirebaseAuth.instance.signOut();
                   return const LoginPage();
                 }
-                
                 return const Dashboard();
               },
             );
-          } else {
-            return kIsWeb ? const AdminLoginPage() : const LoginPage();
-          }
+          } else return kIsWeb ? const AdminLoginPage() : const LoginPage();
         },
       ),
     );
