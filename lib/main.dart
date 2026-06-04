@@ -41,22 +41,30 @@ double _calculateWorkmanagerDOHGoal(int age, String gender) {
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    if (!_isWithinActiveHours()) return Future.value(true);
+    // 1. Check time restriction
+    if (!_isWithinActiveHours()) {
+      debugPrint("Workmanager: Outside active hours, skipping task.");
+      return Future.value(true);
+    }
 
     try {
-      await Firebase.initializeApp();
+      // FIX: Siguraduhin na may options sa initializeApp
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       
       bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
       if (!isNotifEnabled) return Future.value(true);
 
       final String? uid = prefs.getString('user_uid'); 
-      if (uid == null) return Future.value(true);
+      if (uid == null) {
+        debugPrint("Workmanager: No UID found.");
+        return Future.value(true);
+      }
 
       final ref = FirebaseDatabase.instance.ref('users/$uid');
       final snapshot = await ref.get();
       
-      int nextDelayMinutes = 20; // Default interval
+      int nextDelayMinutes = 17; 
 
       if (snapshot.exists) {  
         final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
@@ -66,38 +74,42 @@ void callbackDispatcher() {
         String userGender = data['gender']?.toString() ?? "Male";
         int dailyGoal = _calculateWorkmanagerDOHGoal(userAge, userGender).toInt(); 
         
-        // LOGIC: Kung hindi nagbago ang intake, ibig sabihin hindi nag-dispense
+        // LOGIC: Check kung nag-dispense o hindi
         if (intake <= lastSavedIntake) {
-          // Hindi nag-dispense: Bilisan ang reminder (30 minutes)
-          nextDelayMinutes = 15;
+          // HINDI NAG-DISPENSE: 15 mins interval
+          nextDelayMinutes = 16;
           
           if (intake < dailyGoal) {
             int kulang = dailyGoal - intake.toInt();
+            debugPrint("Workmanager: Sending reminder, kulang: $kulang");
             await NotificationScheduler.showInstantNotification(
               title: "H2O HUB Reminder 💧",
               body: "Student, you have $kulang ml left! Dispense now at the nearest campus hub.",
             );
           }
         } else {
-          // Nag-dispense: Reset sa 60 minutes
-          nextDelayMinutes=20;
+          // NAG-DISPENSE: 20 mins interval
+          nextDelayMinutes = 17;
+          debugPrint("Workmanager: Intake increased, resetting interval to 20 mins.");
           await prefs.setDouble('last_background_intake', intake);
         }
       }
 
+      // FIX: Registering next task
       await Workmanager().registerOneOffTask(
         "h2o_hydration_task", 
         "h2o_hydration_task",
         initialDelay: Duration(minutes: nextDelayMinutes), 
         constraints: Constraints(networkType: NetworkType.connected),
       );
+      
+      debugPrint("Workmanager: Task scheduled in $nextDelayMinutes minutes.");
     } catch (e) {
       debugPrint("Workmanager Error: $e");
     }
     return Future.value(true);
   });
 }
-
 // --- 2. BACKGROUND SERVICE (Real-time Monitoring) ---
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
