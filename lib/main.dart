@@ -48,8 +48,11 @@ void callbackDispatcher() {
     }
 
     try {
-      // FIX: Siguraduhin na may options sa initializeApp
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      // FIX: Siguraduhin na hindi mag-crash kung initialized na
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      }
+      
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       
       bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
@@ -74,6 +77,20 @@ void callbackDispatcher() {
         String userGender = data['gender']?.toString() ?? "Male";
         int dailyGoal = _calculateWorkmanagerDOHGoal(userAge, userGender).toInt(); 
         
+        // --- ADDED: LOGIC PARA SA GOAL REACHED ---
+        if (intake >= dailyGoal) {
+          String todayKey = 'congrats_sent_${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
+          bool hasCongratulated = prefs.getBool(todayKey) ?? false;
+          if (!hasCongratulated) {
+            await NotificationScheduler.showInstantNotification(
+              title: "Goal Reached! 🎉",
+              body: "Congratulations! You have reached your hydration goal for today.",
+            );
+            await prefs.setBool(todayKey, true);
+          }
+        }
+        // ------------------------------------------
+
         // LOGIC: Check kung nag-dispense o hindi
         if (intake <= lastSavedIntake) {
           // HINDI NAG-DISPENSE: 15 mins interval
@@ -101,6 +118,7 @@ void callbackDispatcher() {
         "h2o_hydration_task",
         initialDelay: Duration(minutes: nextDelayMinutes), 
         constraints: Constraints(networkType: NetworkType.connected),
+        existingWorkPolicy: ExistingWorkPolicy.replace,
       );
       
       debugPrint("Workmanager: Task scheduled in $nextDelayMinutes minutes.");
@@ -110,12 +128,14 @@ void callbackDispatcher() {
     return Future.value(true);
   });
 }
-// --- 2. BACKGROUND SERVICE (Real-time Monitoring) ---
-@pragma('vm:entry-point')
+  // --- 2. BACKGROUND SERVICE (Real-time Monitoring) ---
+  @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
+  
+  // HUWAG NA MAG-INITIALIZE ULI DITO PARA HINDI MAG-CONFLICT.
+  // Gagamit tayo ng existing instance.
+  
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) => service.setAsForegroundService());
     service.on('setAsBackground').listen((event) => service.setAsBackgroundService());
@@ -124,48 +144,27 @@ void onStart(ServiceInstance service) async {
   service.on('stopService').listen((event) => service.stopSelf());
 
   try {
-    final user = FirebaseAuth.instance.currentUser;
-    String? uid = user?.uid;
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    if (uid == null) uid = prefs.getString('user_uid'); 
+    // I-access ang database gamit ang existing app instance
+    final ref = FirebaseDatabase.instance.ref(); 
+    final prefs = await SharedPreferences.getInstance();
+    final uid = prefs.getString('user_uid');
 
     if (uid != null) {
-      DatabaseReference dbRef = FirebaseDatabase.instance.ref().child('users/$uid');
-      dbRef.onValue.listen((event) async {
+      ref.child('users/$uid').onValue.listen((event) async {
         if (event.snapshot.value == null) return;
         final userData = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-        
-        // 1. INSTANT GOAL REACHED CHECK
-        double intake = double.tryParse(userData['intake']?.toString() ?? "0") ?? 0;
-        int age = int.tryParse(userData['age']?.toString() ?? "19") ?? 19;
-        String gender = userData['gender']?.toString() ?? "Male";
-        int dailyGoal = _calculateWorkmanagerDOHGoal(age, gender).toInt();
 
-        // Mag-check lang kung bago mag 6:00 PM (18:00)
-        final now = DateTime.now();
-        if (now.hour < 18) { 
-        if (intake >= dailyGoal) {
-        String todayKey = 'congrats_sent_${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
-        bool hasCongratulated = prefs.getBool(todayKey) ?? false;
-    
-          if (!hasCongratulated) {
-            await NotificationScheduler.showInstantNotification(
-              title: "Goal Reached! 🎉",
-              body: "Congratulations! You have reached your hydration goal for today.",
-            );
-            await prefs.setBool(todayKey, true);
-          }
-        }
-      }
-        // 2. INSTANT CREDITS CHECK
+        // --- Logic na gusto mong manatili ---
         bool isScanning = userData['is_scanning'] == true;
         int amount = int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
+        
         if (isScanning && amount > 0) {
           await NotificationScheduler.showInstantNotification(
             title: "Credits Received! ✅",
             body: "PHP $amount.00 detected. Click DISPENSE in the app.",
           );
         }
+        // ------------------------------------
       });
     }
   } catch (e) {
@@ -173,31 +172,31 @@ void onStart(ServiceInstance service) async {
   }
 }
 
-// --- 3. BACKGROUND SERVICE CONFIGURATION ---
-Future<void> initializeBackgroundService() async {
-  final service = FlutterBackgroundService();
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'h2o_notif_channel', 'H2O Service',
-    description: 'Monitoring vending station...',
-    importance: Importance.max, 
-  );
+  // --- 3. BACKGROUND SERVICE CONFIGURATION ---
+  Future<void> initializeBackgroundService() async {
+    final service = FlutterBackgroundService();
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'h2o_notif_channel', 'H2O Service',
+      description: 'Monitoring vending station...',
+      importance: Importance.max, 
+    );
 
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
 
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      onStart: onStart,
-      autoStart: true,
-      isForegroundMode: true,
-      notificationChannelId: 'h2o_notif_channel', 
-      initialNotificationTitle: 'H2O Hub Active',
-      initialNotificationContent: 'Monitoring vending station...',
-      foregroundServiceTypes: [AndroidForegroundType.specialUse],
-    ),
-    iosConfiguration: IosConfiguration(),
-  );
-}
+    await service.configure(
+      androidConfiguration: AndroidConfiguration(
+        onStart: onStart,
+        autoStart: true,
+        isForegroundMode: true,
+        notificationChannelId: 'h2o_notif_channel', 
+        initialNotificationTitle: 'H2O Hub Active',
+        initialNotificationContent: 'Monitoring vending station...',
+        foregroundServiceTypes: [AndroidForegroundType.specialUse],
+      ),
+      iosConfiguration: IosConfiguration(),
+    );
+  }
 
 // --- 4. MAIN ENTRY POINT ---
 
@@ -221,7 +220,7 @@ void main() async {
     await NotificationScheduler.init(); 
 
     await Workmanager().initialize(callbackDispatcher, isInDebugMode: kDebugMode);
-    await Workmanager().cancelAll();
+    //await Workmanager().cancelAll();
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('notifications_enabled') ?? true) {
@@ -230,6 +229,7 @@ void main() async {
         "h2o_hydration_task",
         initialDelay: const Duration(minutes: 16), 
         constraints: Constraints(networkType: NetworkType.connected),
+        existingWorkPolicy: ExistingWorkPolicy.replace,
       );
     }
     
