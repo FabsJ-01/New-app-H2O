@@ -411,8 +411,8 @@ class _OverviewPageState extends State<OverviewPage> {
                   constraints: const BoxConstraints(),
                   icon: const Icon(Icons.remove_circle_outline, color: Colors.orange), 
                   onPressed: () {
-                    if (mlPerPeso > 10) {
-                      _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 10);
+                    if (mlPerPeso > 1) {
+                      _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 1);
                     }
                   },
                 ),
@@ -433,7 +433,7 @@ class _OverviewPageState extends State<OverviewPage> {
                   icon: const Icon(Icons.add_circle_outline, color: Colors.orange), 
                   onPressed: () {
                     if (mlPerPeso < 1000) {
-                      _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 10);
+                      _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 1);
                     }
                   },
                 ),
