@@ -93,21 +93,21 @@ void callbackDispatcher() {
 
         // LOGIC: Check kung nag-dispense o hindi
         if (intake <= lastSavedIntake) {
-          // HINDI NAG-DISPENSE: 15 mins interval
-          nextDelayMinutes = 16;
+          // HINDI NAG-DISPENSE: 30 mins interval
+          nextDelayMinutes = 30;
           
           if (intake < dailyGoal) {
             int kulang = dailyGoal - intake.toInt();
             debugPrint("Workmanager: Sending reminder, kulang: $kulang");
             await NotificationScheduler.showInstantNotification(
               title: "H2O HUB Reminder 💧",
-              body: "Student, you have $kulang ml left! Dispense now at the nearest campus hub.",
+              body: "Student, you have $kulang ml left! Dispense now at the nearest H2O hub.",
             );
           }
         } else {
-          // NAG-DISPENSE: 20 mins interval
-          nextDelayMinutes = 17;
-          debugPrint("Workmanager: Intake increased, resetting interval to 20 mins.");
+          // NAG-DISPENSE: 60 mins interval
+          nextDelayMinutes = 60;
+          debugPrint("Workmanager: Intake increased, resetting interval to 60 mins.");
           await prefs.setDouble('last_background_intake', intake);
         }
       }
@@ -133,8 +133,12 @@ void callbackDispatcher() {
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   
-  // HUWAG NA MAG-INITIALIZE ULI DITO PARA HINDI MAG-CONFLICT.
-  // Gagamit tayo ng existing instance.
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+ 
   
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) => service.setAsForegroundService());
@@ -205,11 +209,9 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Ilabas natin ito sa 'if (!kIsWeb)' para hindi mag-error kung sakaling mag-restart
-  try {
-    FirebaseDatabase.instance.setPersistenceEnabled(true);
-  } catch (e) {
-    debugPrint("Persistence already enabled or not supported: $e");
-  }
+ try {
+  FirebaseDatabase.instance.setPersistenceEnabled(true);
+} catch (_) {}
 
   if (!kIsWeb) {
     if (await Permission.notification.isDenied) await Permission.notification.request();
@@ -227,7 +229,7 @@ void main() async {
       await Workmanager().registerOneOffTask(
         "h2o_hydration_task", 
         "h2o_hydration_task",
-        initialDelay: const Duration(minutes: 16), 
+        initialDelay: Duration.zero, 
         constraints: Constraints(networkType: NetworkType.connected),
         existingWorkPolicy: ExistingWorkPolicy.replace,
       );
