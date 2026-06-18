@@ -129,7 +129,7 @@ void callbackDispatcher() {
   });
 }
   // --- 2. BACKGROUND SERVICE (Real-time Monitoring) ---
-  @pragma('vm:entry-point')
+ @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   
@@ -139,7 +139,6 @@ void onStart(ServiceInstance service) async {
     );
   }
  
-  
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) => service.setAsForegroundService());
     service.on('setAsBackground').listen((event) => service.setAsBackgroundService());
@@ -148,7 +147,6 @@ void onStart(ServiceInstance service) async {
   service.on('stopService').listen((event) => service.stopSelf());
 
   try {
-    // I-access ang database gamit ang existing app instance
     final ref = FirebaseDatabase.instance.ref(); 
     final prefs = await SharedPreferences.getInstance();
     final uid = prefs.getString('user_uid');
@@ -158,17 +156,34 @@ void onStart(ServiceInstance service) async {
         if (event.snapshot.value == null) return;
         final userData = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
 
-        // --- Logic na gusto mong manatili ---
+        // --- DITO MO ILAGAY ANG LOGIC PARA HINDI MAG-SPAM ---
         bool isScanning = userData['is_scanning'] == true;
         int amount = int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
-        
-        if (isScanning && amount > 0) {
+
+        // Kunin ang huling na-notify para ikumpara
+        await prefs.reload();
+        final lastNotifiedAmount = prefs.getInt('last_notified_credit_amount') ?? -1;
+        final lastNotifiedScanState = prefs.getBool('last_notified_scan_state') ?? false;
+
+        // Ang kondisyon: Dapat nag-scan, may barya, at HINDI pa na-notify yung ganitong amount
+        bool isNewCreditEvent = isScanning && amount > 0 && (amount != lastNotifiedAmount || !lastNotifiedScanState);
+
+        if (isNewCreditEvent) {
           await NotificationScheduler.showInstantNotification(
             title: "Credits Received! ✅",
             body: "PHP $amount.00 detected. Click DISPENSE in the app.",
           );
+          
+          // I-save na na-notify na natin ito
+          await prefs.setInt('last_notified_credit_amount', amount);
+          await prefs.setBool('last_notified_scan_state', true);
         }
-        // ------------------------------------
+
+        // I-reset ang state kapag natapos na ang pag-scan (para makapag-notify ulit sa susunod)
+        if (!isScanning) {
+          await prefs.setBool('last_notified_scan_state', false);
+        }
+        // ----------------------------------------------------
       });
     }
   } catch (e) {

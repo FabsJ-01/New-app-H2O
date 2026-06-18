@@ -11,12 +11,15 @@ class ChangePasswordPage extends StatefulWidget {
 }
 
 class _ChangePasswordPageState extends State<ChangePasswordPage> {
+  final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   
   // Variables para sa eye icon toggle
+  bool _obscureCurrentPass = true;
   bool _obscureNewPass = true;
   bool _obscureConfirmPass = true;
+  bool _isLoading = false;
 
   // Validation Logic
   bool _isPasswordValid(String password) {
@@ -31,10 +34,11 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   }
 
   Future<void> _updatePassword() async {
+    String currentPass = _currentPasswordController.text.trim();
     String newPass = _newPasswordController.text.trim();
     String confirmPass = _confirmPasswordController.text.trim();
 
-    if (newPass.isEmpty || confirmPass.isEmpty) {
+    if (currentPass.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
       _showSnackBar("Please fill all fields");
       return;
     }
@@ -50,19 +54,26 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       return;
     }
 
+    setState(() => _isLoading = true);
+
     try {
       // 1. Kunin ang kasalukuyang user na dinala rito ng login page bypass logic
       final user = FirebaseAuth.instance.currentUser;
       
       if (user != null && user.email != null) {
-        // Kunin ang PSU ID mula sa email format (e.g., 2023311060@psu.edu.ph -> 2023311060)
-        String psuId = user.email!.split('@')[0];
+        // 1a. RE-AUTHENTICATE muna bago payagan ng Firebase ang sensitive operation
+        //     (kailangan ito dahil sa "requires-recent-login" error ng Firebase Auth)
+        final credential = EmailAuthProvider.credential(
+          email: user.email!,
+          password: currentPass,
+        );
+        await user.reauthenticateWithCredential(credential);
 
         // 2. I-update ang password sa Firebase Authentication para opisyal na silang makalogin sa susunod
         await user.updatePassword(newPass);
 
         // 3. I-update ang Realtime Database: Baguhin ang password at ibalik sa 'Active' ang status
-        await FirebaseDatabase.instance.ref().child('users/$psuId').update({
+        await FirebaseDatabase.instance.ref().child('users/${user.uid}').update({
           'password': newPass,
           'status': 'Active', // Tinanggal na ang 'Password Reset by Admin' tag
         });
@@ -78,8 +89,19 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
           (Route<dynamic> route) => false,
         );
       }
+    } on FirebaseAuthException catch (e) {
+      // Specific na error handling para malinaw sa user kung mali ang current password
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        _showSnackBar("Current password is incorrect.");
+      } else if (e.code == 'too-many-requests') {
+        _showSnackBar("Too many attempts. Please try again later.");
+      } else {
+        _showSnackBar("Error: ${e.message}");
+      }
     } catch (e) {
       _showSnackBar("Error: ${e.toString()}");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -99,6 +121,19 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
+            // Current Password Field (kailangan para sa reauthentication)
+            TextField(
+              controller: _currentPasswordController,
+              obscureText: _obscureCurrentPass,
+              decoration: InputDecoration(
+                labelText: "Current Password",
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureCurrentPass ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscureCurrentPass = !_obscureCurrentPass),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
             // New Password Field
             TextField(
               controller: _newPasswordController,
@@ -136,12 +171,21 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _updatePassword,
+                onPressed: _isLoading ? null : _updatePassword,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[900],
                   padding: const EdgeInsets.symmetric(vertical: 15),
                 ),
-                child: const Text("Submit", style: TextStyle(color: Colors.white)),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text("Submit", style: TextStyle(color: Colors.white)),
               ),
             ),
           ],

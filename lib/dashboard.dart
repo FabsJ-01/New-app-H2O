@@ -194,13 +194,10 @@ class _DashboardState extends State<Dashboard> {
             );
           }
 
-          if (!wasReady && _isMachineReady) {
-            int amount = int.tryParse(data['last_credits']?.toString() ?? "0") ?? 0;
-            _sendNotification(
-              "Credits Received! ✅", 
-              "PHP $amount.00 has been verified. Click the button to dispense water."
-            );
-          }
+          // NOTE: Tinanggal ang "Credits Received" notification dito dahil
+          // duplicate na sa BackgroundService (main.dart onStart()), na siyang
+          // nananatiling tumatakbo kahit closed ang app. Iisang source na lang
+          // ng notification para hindi na mag-double.
 
           await prefs.setDouble('last_intake', intakeDisplay);
         }
@@ -213,163 +210,335 @@ class _DashboardState extends State<Dashboard> {
     double percent = (dailyGoal > 0) ? (intakeDisplay / dailyGoal).clamp(0.0, 1.0) : 0.0;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF7FAFD),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("H2O HUB", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          "H2O HUB",
+          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        ),
         centerTitle: true,
-        backgroundColor: Colors.blue[900],
+        elevation: 0,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.blue.shade800, Colors.blue.shade600],
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilePage())),
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person_outline, size: 20),
+              ),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilePage())),
+            ),
           )
         ],
       ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async => _activateListeners(),
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              children: [
-                const SizedBox(height: 25),
-                Text(
-                  "Hydration Monitoring",
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue[900],
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 20),
+      body: Stack(
+        children: [
+          // Soft gradient header background — gumagana kasabay ng extendBodyBehindAppBar
+          Container(
+            height: 240,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.blue.shade800, Colors.blue.shade600],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: () async => _activateListeners(),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 28),
+                    const Text(
+                      "Hydration Monitoring",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
 
-                CircularPercentIndicator(
-                  radius: 110.0,
-                  lineWidth: 18.0,
-                  percent: percent,
-                  animation: true,
-                  circularStrokeCap: CircularStrokeCap.round,
-                  progressColor: (percent >= 1.0) ? Colors.greenAccent : Colors.blueAccent,
-                  backgroundColor: Colors.blue.shade50,
-                  center: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text("${(percent * 100).toInt()}%", style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold)),
-                      Text("${intakeDisplay.toInt()}ml / ${dailyGoal.toInt()}ml", style: const TextStyle(fontSize: 14)),
-                    ],
-                  ),
+                    // Soft card na naglalaman ng progress ring — "floats" sa ibabaw ng gradient
+                    // Soft card na naglalaman ng progress ring
+Container(
+  margin: const EdgeInsets.symmetric(horizontal: 50), // Ibalik sa 24 para maganda ang width ng card
+  padding: const EdgeInsets.symmetric(vertical: 30),
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(28),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.blue.shade100.withOpacity(0.6),
+        blurRadius: 24,
+        offset: const Offset(0, 12),
+      ),
+    ],
+  ),
+  child: LayoutBuilder(
+    builder: (context, constraints) {
+      // Kalkulahin ang radius: kumuha ng 40% ng width ng card para laging perfect fit
+      double calculatedRadius = constraints.maxWidth * 0.40;
+      
+      return Center(
+        child: CircularPercentIndicator(
+          radius: calculatedRadius, 
+          lineWidth: 20.0, // Medyo taasan natin ulit kasi may space na
+          percent: percent,
+          animation: true,
+          animationDuration: 800,
+          circularStrokeCap: CircularStrokeCap.round,
+          linearGradient: (percent >= 1.0)
+              ? LinearGradient(colors: [Colors.green.shade400, Colors.teal.shade300])
+              : LinearGradient(colors: [Colors.blue.shade400, Colors.lightBlue.shade300]),
+          backgroundColor: Colors.blue.shade50,
+          center: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "${(percent * 100).toInt()}%",
+                style: TextStyle(
+                  fontSize: 40, // Ibalik sa 40 para malinaw
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade900,
                 ),
-                const SizedBox(height: 40),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "${intakeDisplay.toInt()}ml / ${dailyGoal.toInt()}ml",
+                style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  ),
+),
+
+                    const SizedBox(height: 30),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 500),
                     child: _isMachineReady 
                     ? Column( 
                         key: const ValueKey("dispense"),
                         children: [
-                          const Text("System Ready ✅", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          SizedBox(
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle, size: 16, color: Colors.green.shade600),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "System Ready",
+                                  style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Container(
                             width: double.infinity,
-                            height: 65,
-                            child: ElevatedButton.icon(
-                              onPressed: _triggerWaterDispense,
-                              icon: const Icon(Icons.water_drop, size: 28),
-                              label: const Text("DISPENSE WATER", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue[600],
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                elevation: 10,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Colors.blue.shade500, Colors.blue.shade700],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.blue.shade300.withOpacity(0.5),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: _triggerWaterDispense,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.water_drop, size: 26, color: Colors.white),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      "DISPENSE WATER",
+                                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.3),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ],
                       )
-                    : SizedBox(
+                    : Container(
                         key: const ValueKey("qr"),
                         width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton.icon(
-                          onPressed: _showQRDialog,
-                          icon: const Icon(Icons.qr_code_2),
-                          label: const Text("SHOW MY QR CODE"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue[800],
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        height: 56,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Colors.blue.shade700, Colors.blue.shade900],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.shade200.withOpacity(0.6),
+                              blurRadius: 14,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: _showQRDialog,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.qr_code_2, color: Colors.white),
+                                SizedBox(width: 10),
+                                Text(
+                                  "SHOW MY QR CODE",
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                   ),
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 28),
 
-                // Pinalit na DOH Goal design
+                // Pinalit na DOH Goal design — softer pill style
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Text(
-                      "Goal: ${dailyGoal.toInt()}ml (DOH Guidelines for Age $age)",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.blue[900], fontWeight: FontWeight.w500),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.info_outline_rounded, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            "Goal: ${dailyGoal.toInt()}ml (DOH Guidelines for Age $age)",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12.5, color: Colors.blue.shade900, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 15),
+                const SizedBox(height: 14),
 
                 // Bagong Stats Button
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
                   child: SizedBox(
                     width: double.infinity,
-                    height: 50,
+                    height: 52,
                     child: OutlinedButton.icon(
                       onPressed: _showWeeklyStats,
-                      icon: const Icon(Icons.bar_chart),
-                      label: const Text("VIEW WEEKLY PROGRESS"),
+                      icon: Icon(Icons.bar_chart_rounded, color: Colors.blue.shade800),
+                      label: Text(
+                        "VIEW WEEKLY PROGRESS",
+                        style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.w600),
+                      ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blue[900],
-                        side: BorderSide(color: Colors.blue.shade200),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        backgroundColor: Colors.white,
+                        side: BorderSide(color: Colors.blue.shade100, width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
                     ),
                   ),
                 ),
                 
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
 
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 30),
+                  margin: const EdgeInsets.symmetric(horizontal: 28),
                   decoration: BoxDecoration(
-                    color: _notificationsEnabled ? Colors.blue.shade50 : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: _notificationsEnabled ? Colors.blue.shade100 : Colors.grey.shade300)
+                    color: _notificationsEnabled ? Colors.white : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blueGrey.shade100.withOpacity(0.5),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text(
                       _notificationsEnabled ? "Campus Alerts Active" : "Alerts Paused (At Home)",
                       style: TextStyle(
                         fontWeight: FontWeight.bold, 
+                        fontSize: 14,
                         color: _notificationsEnabled ? Colors.blue.shade900 : Colors.grey.shade700
                       ),
                     ),
-                    subtitle: const Text("Turn off if you are away from the campus hub"),
-                    value: _notificationsEnabled,
-                    secondary: Icon(
-                      _notificationsEnabled ? Icons.notifications_active : Icons.notifications_off,
-                      color: _notificationsEnabled ? Colors.blue.shade800 : Colors.grey,
+                    subtitle: Text(
+                      "Turn off if you are away from the campus hub",
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     ),
-                    activeColor: Colors.blue.shade900,
+                    value: _notificationsEnabled,
+                    secondary: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _notificationsEnabled ? Colors.blue.shade50 : Colors.grey.shade200,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _notificationsEnabled ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+                        color: _notificationsEnabled ? Colors.blue.shade700 : Colors.grey,
+                        size: 20,
+                      ),
+                    ),
+                    activeColor: Colors.blue.shade700,
                     onChanged: _toggleNotifications,
                   ),
                 ),
@@ -378,6 +547,8 @@ class _DashboardState extends State<Dashboard> {
             ),
           ),
         ),
+          ),
+        ],
       ),
     );
   }
