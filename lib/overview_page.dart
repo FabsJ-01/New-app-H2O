@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart' show kIsWeb; 
+// ignore: avoid_web_libraries_in_flutter
+//import 'dart:html' as html;
+import 'notification_stub.dart' if (dart.library.js_interop) 'dart:html' as html;
 
 class OverviewPage extends StatefulWidget {
   const OverviewPage({super.key});
@@ -16,12 +20,16 @@ class _OverviewPageState extends State<OverviewPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   Timer? _midnightTimer;
 
+  // Track kung kailan huling nag-notify per vendo (para sa 30-min cooldown)
+  final Map<String, DateTime> _lastNotifiedTime = {};
+
   String get _todayDate => DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   @override
   void initState() {
     super.initState();
     _scheduleMidnightReset();
+    _requestBrowserNotificationPermission();
   }
 
   @override
@@ -30,10 +38,69 @@ class _OverviewPageState extends State<OverviewPage> {
     super.dispose();
   }
 
+  // --- REQUEST BROWSER NOTIFICATION PERMISSION ---
+  Future<void> _requestBrowserNotificationPermission() async {
+    // Dagdag na check para sa mobile
+    if (!kIsWeb) return; 
+
+    try {
+      final permission = await html.Notification.requestPermission();
+      if (permission == 'granted') {
+        debugPrint("Browser notifications: GRANTED");
+      } else {
+        debugPrint("Browser notifications: DENIED or DEFAULT");
+      }
+    } catch (e) {
+      debugPrint("Browser notification permission error: $e");
+    }
+  }
+
+  // --- SEND BROWSER NOTIFICATION ---
+  void _sendLowWaterNotification(String vendoName, int waterLevel) {
+    // Napakahalaga nito: huwag ituloy kung hindi web
+    if (!kIsWeb) return; 
+
+    try {
+      if (html.Notification.permission == 'granted') {
+        html.Notification(
+          "⚠️ Low Water Level Alert!",
+          body: "$vendoName is at $waterLevel% — please refill immediately.",
+          icon: "/favicon.png",
+        );
+      }
+    } catch (e) {
+      debugPrint("Browser notification error: $e");
+    }
+  }
+
+  // --- CHECK IF SHOULD NOTIFY (10% threshold + 30-min cooldown) ---
+  void _checkAndNotifyLowWater(String vendoId, String vendoName, int waterLevel) {
+    if (waterLevel > 10) {
+      // Kung nag-refill na (>10%), i-reset ang cooldown para mag-notify ulit next time
+      _lastNotifiedTime.remove(vendoId);
+      return;
+    }
+
+    final lastTime = _lastNotifiedTime[vendoId];
+    final now = DateTime.now();
+
+    // Mag-notify lang kung:
+    // 1. Hindi pa naka-notify para sa vendo na ito, o
+    // 2. 30 minutes na ang lumipas mula noong huli
+    bool shouldNotify = lastTime == null ||
+        now.difference(lastTime).inMinutes >= 30;
+
+    if (shouldNotify) {
+      _sendLowWaterNotification(vendoName, waterLevel);
+      _lastNotifiedTime[vendoId] = now;
+      debugPrint("Low water notification sent for $vendoName at $waterLevel%");
+    }
+  }
+
   // --- AUTOMATIC MIDNIGHT RESET TIMER ---
   void _scheduleMidnightReset() {
     _midnightTimer?.cancel();
-    
+
     final now = DateTime.now();
     final tomorrow = DateTime(now.year, now.month, now.day + 1);
     final timeUntilMidnight = tomorrow.difference(now);
@@ -117,10 +184,9 @@ class _OverviewPageState extends State<OverviewPage> {
                         email: user.email!,
                         password: passwordController.text.trim(),
                       );
-
                       await user.reauthenticateWithCredential(credential);
                       await _dbRef.child('vendos').child(id).remove();
-                      
+
                       if (!mounted) return;
                       Navigator.pop(context);
                       _showSnackBar("$name deleted successfully.", Colors.red);
@@ -197,11 +263,11 @@ class _OverviewPageState extends State<OverviewPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "Realtime Vendo Monitoring", 
+            "Realtime Vendo Monitoring",
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 30),
-          
+
           StreamBuilder(
             stream: _dbRef.child('vendos').onValue,
             builder: (context, snapshot) {
@@ -211,12 +277,29 @@ class _OverviewPageState extends State<OverviewPage> {
 
                 if (rawData is Map) {
                   rawData.forEach((key, value) {
-                    vendoCards.add(_buildVendoMonitorCard(key.toString(), Map<dynamic, dynamic>.from(value)));
+                    final vendoData = Map<dynamic, dynamic>.from(value);
+                    final int waterLevel = vendoData['water_level'] ?? 0;
+                    final String vendoName = vendoData['name'] ?? "Unknown Vendo";
+
+                    // I-check at i-notify kung low water na — real-time per StreamBuilder update
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _checkAndNotifyLowWater(key.toString(), vendoName, waterLevel);
+                    });
+
+                    vendoCards.add(_buildVendoMonitorCard(key.toString(), vendoData));
                   });
                 } else if (rawData is List) {
                   for (int i = 0; i < rawData.length; i++) {
                     if (rawData[i] != null) {
-                      vendoCards.add(_buildVendoMonitorCard(i.toString(), Map<dynamic, dynamic>.from(rawData[i])));
+                      final vendoData = Map<dynamic, dynamic>.from(rawData[i]);
+                      final int waterLevel = vendoData['water_level'] ?? 0;
+                      final String vendoName = vendoData['name'] ?? "Unknown Vendo";
+
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _checkAndNotifyLowWater(i.toString(), vendoName, waterLevel);
+                      });
+
+                      vendoCards.add(_buildVendoMonitorCard(i.toString(), vendoData));
                     }
                   }
                 }
@@ -236,115 +319,151 @@ class _OverviewPageState extends State<OverviewPage> {
     int waterLevel = data['water_level'] ?? 0;
     String status = data['wifi_status'] ?? "Offline";
     bool isOnline = status == "Connected";
-    
-    // Binabasa ang realtime na value mula sa DB kung may laman, default ay 200ml
     int mlPerPeso = (data['settings'] != null) ? (data['settings']['ml_per_peso'] ?? 200) : 200;
+
+    // Low water warning banner — visible kung 10% o pababa na
+    final bool isLowWater = waterLevel <= 10;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 25),
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        children: [
+          // Low water warning banner sa taas ng card
+          if (isLowWater)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(15),
+                  topRight: Radius.circular(15),
+                ),
+                border: Border(bottom: BorderSide(color: Colors.red.shade200)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      "⚠️ Low Water Level! Only $waterLevel% remaining — please refill immediately.",
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          Padding(
+            padding: const EdgeInsets.all(25),
+            child: Column(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => _showEditNameDialog(id, name),
+                              child: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                            ),
+                          ],
+                        ),
+                        Text("ID: $id", style: const TextStyle(color: Colors.grey)),
+                      ],
+                    ),
                     Row(
                       children: [
-                        Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () => _showEditNameDialog(id, name),
-                          child: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                        _statusBadge(isOnline, status),
+                        const SizedBox(width: 10),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => _showDeleteDialog(id, name),
                         ),
                       ],
                     ),
-                    Text("ID: $id", style: const TextStyle(color: Colors.grey)),
                   ],
                 ),
+                const Divider(height: 40),
+                _buildPricingConfig(id, mlPerPeso),
+                const SizedBox(height: 20),
+
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    bool isCompact = constraints.maxWidth < 550;
+
+                    if (isCompact) {
+                      return Column(
+                        children: [
+                          _buildQuickStat("Water Level", "$waterLevel%", Icons.opacity, waterLevel > 10 ? Colors.blue : Colors.red),
+                          const SizedBox(height: 12),
+                          _buildUsersTodayStat(id),
+                          const SizedBox(height: 12),
+                          _buildQuickStat("Ratio", "₱1:${mlPerPeso}ml", Icons.scale, Colors.teal),
+                        ],
+                      );
+                    } else {
+                      return IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: _buildQuickStat("Water Level", "$waterLevel%", Icons.opacity, waterLevel > 10 ? Colors.blue : Colors.red)),
+                            const SizedBox(width: 15),
+                            Expanded(child: _buildUsersTodayStat(id)),
+                            const SizedBox(width: 15),
+                            Expanded(child: _buildQuickStat("Ratio", "₱1:${mlPerPeso}ml", Icons.scale, Colors.teal)),
+                          ],
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 30),
                 Row(
                   children: [
-                    _statusBadge(isOnline, status),
-                    const SizedBox(width: 10),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _showDeleteDialog(id, name),
+                    Expanded(
+                      child: _buildActionButton(
+                        "Force Dispense",
+                        Icons.play_circle_fill,
+                        Colors.green,
+                        () => _showConfirmDialog(
+                          title: "Confirm Force Dispense",
+                          content: "Are you sure you want to trigger a force dispense for $name?",
+                          onConfirm: () => _sendCommand("vendos/$id/force_dispense", true, Colors.green),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _buildActionButton(
+                        "Refill Reset",
+                        Icons.opacity,
+                        Colors.blue,
+                        () => _showConfirmDialog(
+                          title: "Confirm Water Refill",
+                          content: "This will reset the water level of $name to 100%. Proceed?",
+                          onConfirm: () => _sendCommand("vendos/$id/water_level", 100, Colors.blue),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
-            const Divider(height: 40),
-            _buildPricingConfig(id, mlPerPeso),
-            const SizedBox(height: 20),
-            
-            LayoutBuilder(
-              builder: (context, constraints) {
-                bool isCompact = constraints.maxWidth < 550;
-                
-                if (isCompact) {
-                  return Column(
-                    children: [
-                      _buildQuickStat("Water Level", "$waterLevel%", Icons.opacity, waterLevel > 20 ? Colors.blue : Colors.red),
-                      const SizedBox(height: 12),
-                      _buildUsersTodayStat(id),
-                      const SizedBox(height: 12),
-                      _buildQuickStat("Ratio", "₱1:${mlPerPeso}ml", Icons.scale, Colors.teal),
-                    ],
-                  );
-                } else {
-                  return IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: _buildQuickStat("Water Level", "$waterLevel%", Icons.opacity, waterLevel > 20 ? Colors.blue : Colors.red)),
-                        const SizedBox(width: 15),
-                        Expanded(child: _buildUsersTodayStat(id)),
-                        const SizedBox(width: 15),
-                        Expanded(child: _buildQuickStat("Ratio", "₱1:${mlPerPeso}ml", Icons.scale, Colors.teal)),
-                      ],
-                    ),
-                  );
-                }
-              },
-            ),
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionButton(
-                    "Force Dispense", 
-                    Icons.play_circle_fill, 
-                    Colors.green, 
-                    () => _showConfirmDialog(
-                      title: "Confirm Force Dispense",
-                      content: "Are you sure you want to trigger a force dispense for $name?",
-                      onConfirm: () => _sendCommand("vendos/$id/force_dispense", true, Colors.green),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: _buildActionButton(
-                    "Refill Reset", 
-                    Icons.opacity, 
-                    Colors.blue, 
-                    () => _showConfirmDialog(
-                      title: "Confirm Water Refill",
-                      content: "This will reset the water level of $name to 100%. Proceed?",
-                      onConfirm: () => _sendCommand("vendos/$id/water_level", 100, Colors.blue),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -357,15 +476,15 @@ class _OverviewPageState extends State<OverviewPage> {
         if (snapshot.hasData && snapshot.data!.snapshot.value != null) {
           final dynamic rawLogs = snapshot.data!.snapshot.value;
           Map<dynamic, dynamic> logs = (rawLogs is Map) ? rawLogs : {};
-          
+
           Set<String> uniqueUsers = {};
 
           logs.forEach((key, log) {
             String currentLogVendoId = log['vendo_id']?.toString() ?? "";
-            
-            bool isMatchingVendo = (currentLogVendoId == vendoId) || 
-                                   (currentLogVendoId.contains(vendoId)) || 
-                                   (vendoId.contains(currentLogVendoId));
+
+            bool isMatchingVendo = (currentLogVendoId == vendoId) ||
+                (currentLogVendoId.contains(vendoId)) ||
+                (vendoId.contains(currentLogVendoId));
 
             if (isMatchingVendo && log['timestamp']?.toString().startsWith(_todayDate) == true) {
               String? uid = log['uid']?.toString();
@@ -385,7 +504,7 @@ class _OverviewPageState extends State<OverviewPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-          color: isOnline ? Colors.green[100] : Colors.red[100], 
+          color: isOnline ? Colors.green[100] : Colors.red[100],
           borderRadius: BorderRadius.circular(20)),
       child: Text(status, style: TextStyle(color: isOnline ? Colors.green[700] : Colors.red[700], fontWeight: FontWeight.bold)),
     );
@@ -395,8 +514,8 @@ class _OverviewPageState extends State<OverviewPage> {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.05), 
-          borderRadius: BorderRadius.circular(12), 
+          color: Colors.orange.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.orange.withOpacity(0.2))),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -409,7 +528,7 @@ class _OverviewPageState extends State<OverviewPage> {
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.remove_circle_outline, color: Colors.orange), 
+                  icon: const Icon(Icons.remove_circle_outline, color: Colors.orange),
                   onPressed: () {
                     if (mlPerPeso > 1) {
                       _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 1);
@@ -421,7 +540,7 @@ class _OverviewPageState extends State<OverviewPage> {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      "Volume: $mlPerPeso / ₱1", 
+                      "Volume: $mlPerPeso / ₱1",
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -430,7 +549,7 @@ class _OverviewPageState extends State<OverviewPage> {
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.orange), 
+                  icon: const Icon(Icons.add_circle_outline, color: Colors.orange),
                   onPressed: () {
                     if (mlPerPeso < 1000) {
                       _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 1);
@@ -450,7 +569,7 @@ class _OverviewPageState extends State<OverviewPage> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05), 
+        color: color.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -465,15 +584,15 @@ class _OverviewPageState extends State<OverviewPage> {
         ],
       ),
     );
-  } 
+  }
 
   Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onPressed) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-          backgroundColor: color, 
-          foregroundColor: Colors.white, 
+          backgroundColor: color,
+          foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 18), 
+          padding: const EdgeInsets.symmetric(vertical: 18),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
       onPressed: onPressed,
       icon: Icon(icon, size: 20),

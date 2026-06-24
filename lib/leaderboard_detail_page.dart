@@ -97,7 +97,6 @@ class _LeaderboardDetailPageState extends State<LeaderboardDetailPage> {
                   else if (fullCourse.contains("Business Administration")) courseCode = "BSBA";
                   else if (fullCourse.contains("Hospitality Management")) courseCode = "BSHM";
                   else if (fullCourse.contains("Education")) courseCode = "BSED";
-                  else if (fullCourse.contains("Civil Engineering")) courseCode = "BSCE";
                    else if (fullCourse.contains("Civil Engineering")) courseCode = "BSCE";
                    else if (fullCourse.contains("Tourism Management")) courseCode = "BSTM";
                    else if (fullCourse.contains("Electrical Engineering")) courseCode = "BSEE";

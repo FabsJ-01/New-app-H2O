@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_page.dart';
 import 'notification_scheduler.dart'; 
+import 'weekly_progress_page.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -39,15 +40,12 @@ class _DashboardState extends State<Dashboard> {
 
   // Placeholder para sa stats function
   void _showWeeklyStats() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Weekly Intake (7 Days)", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text("Dito lalabas ang iyong statistics report."),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("CLOSE"))],
-      ),
-    );
-  }
+  // Bubuksan nito ang buong bagong screen
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const WeeklyProgressPage()),
+  );
+}
 
   Future<void> _sendNotification(String title, String body) async {
     if (!_notificationsEnabled) return; 
@@ -140,11 +138,16 @@ class _DashboardState extends State<Dashboard> {
     return 2000.0; 
   }
 
-  void _checkAndResetDailyIntake(String uid, Map data) async {
+  Future<void> _checkAndResetDailyIntake(String uid, Map data) async {
+   //String today = "2026-06-18";
+    
     String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     String lastUpdate = data['update']?.toString() ?? "";
-    
+
     if (today != lastUpdate) {
+      int lastIntake = int.tryParse(data['intake']?.toString() ?? "0") ?? 0;
+
+       await _dbRef.child('history/$uid/$lastUpdate').set(lastIntake);
       await _dbRef.child('users/$uid').update({
         'intake': 0,
         'update': today, 
@@ -474,28 +477,53 @@ Container(
 
                 const SizedBox(height: 14),
 
-                // Bagong Stats Button
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      onPressed: _showWeeklyStats,
-                      icon: Icon(Icons.bar_chart_rounded, color: Colors.blue.shade800),
-                      label: Text(
-                        "VIEW WEEKLY PROGRESS",
-                        style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        side: BorderSide(color: Colors.blue.shade100, width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                // Bagong Stats Button (Navigation Type)
+Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 28),
+  child: Container(
+    width: double.infinity,
+    height: 52,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.blue.shade100, width: 1.5),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.blue.shade50.withOpacity(0.4),
+          blurRadius: 8,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      // Hanapin ang parteng ito sa iyong Dashboard.dart
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        
+                        // DITO MO SIYA ILALAGAY:
+                        onTap: _showWeeklyStats, 
+                        
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.bar_chart_rounded, color: Colors.blue.shade800),
+                            const SizedBox(width: 10),
+                            Text(
+                              "VIEW WEEKLY PROGRESS",
+                              style: TextStyle(
+                                color: Colors.blue.shade900,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-                
+                                
                 const SizedBox(height: 18),
 
                 Container(
