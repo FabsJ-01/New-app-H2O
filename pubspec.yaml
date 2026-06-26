@@ -39,6 +39,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.jpg
+    - assets/images/bgAdminlgn.jpg
 
 # Dito sa pinakababa ang configuration. 
 # Siguraduhin na may DALAWANG SPACES bago ang android, ios, etc.
@@ -48,3 +49,4 @@ flutter_launcher_icons:
   image_path: "assets/images/logo.jpg"
   adaptive_icon_background: "#ffffff"
   adaptive_icon_foreground: "assets/images/logo.jpg"
+  

@@ -21,21 +21,21 @@ class _LeaderboardDetailPageState extends State<LeaderboardDetailPage> {
       case 'BSIT': 
         return Colors.grey;
       case 'BSPSY':
-        return const Color.fromARGB(255, 246, 248, 246);
+        return const Color.fromARGB(255, 59, 246, 183);
         case 'BSED': 
         return Colors.red;
       case 'BSBA': 
-        return Colors.blue;
+        return const Color.fromARGB(255, 244, 180, 26);
       case 'BSCE': 
         return const Color.fromARGB(255, 67, 67, 67);
       case 'BSHM': 
         return Colors.green;
         case 'BSTM': 
-        return const Color.fromARGB(255, 178, 69, 167);
-      case 'BSEE': 
-        return Colors.deepPurple;
+        return const Color.fromARGB(255, 255, 133, 191);
       case 'BEED': 
-        return Colors.orange;
+        return const Color.fromARGB(255, 12, 35, 90);
+      case 'BSENT': 
+        return const Color.fromARGB(255, 0, 255, 255);
       default: 
         return const Color.fromARGB(255, 0, 0, 0); 
     }
@@ -99,9 +99,9 @@ class _LeaderboardDetailPageState extends State<LeaderboardDetailPage> {
                   else if (fullCourse.contains("Education")) courseCode = "BSED";
                    else if (fullCourse.contains("Civil Engineering")) courseCode = "BSCE";
                    else if (fullCourse.contains("Tourism Management")) courseCode = "BSTM";
-                   else if (fullCourse.contains("Electrical Engineering")) courseCode = "BSEE";
                    else if (fullCourse.contains("Elementary Education")) courseCode = "BEED";
                    else if (fullCourse.contains("Psychology")) courseCode = "BSPSY";
+                   else if (fullCourse.contains("Entrepreneurship")) courseCode = "BSENT";
                   else if (fullCourse.isEmpty) courseCode = "Others";
 
                   double ml = double.tryParse(value['amount_ml']?.toString() ?? 

@@ -72,7 +72,7 @@ class _RegisterPageState extends State<RegisterPage> {
     );
 
     try {
-      String psuEmail = "${idController.text.trim()}@psu.edu.ph";
+      String psuEmail = "${idController.text.trim()}@pampangastateu.edu.ph";
       int userAge = int.tryParse(ageController.text.trim()) ?? 0;
 
       // A. Create User sa Firebase Auth

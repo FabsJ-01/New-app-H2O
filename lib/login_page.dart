@@ -4,6 +4,7 @@ import 'register_page.dart';
 import 'dashboard.dart';    
 import 'package:firebase_database/firebase_database.dart'; 
 import 'change_password_page.dart'; 
+import 'forgotpassMobile_page.dart'; // <-- Idinagdag para sa Forgot Password navigation
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -70,7 +71,7 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       // 2. NORMAL LOGIN: Kung hindi naman ni-reset o normal ang status
-      String psuEmail = "$psuId@psu.edu.ph";
+      String psuEmail = "$psuId@pampangastateu.edu.ph";
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: psuEmail,
         password: inputPassword,
@@ -151,7 +152,25 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 25),
+              
+              // 🔥 DITO INILAGAY ANG FORGOT PASSWORD LINK:
+              // Ginamit ang Align para mai-pwesto ito sa kanang bahagi sa ilalim ng password field
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ForgotPassMobilePage()), // Siguraduhing tugma ang class name sa file mo boss
+                    );
+                  },
+                  child: const Text(
+                    "Forgot Password?",
+                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10), // Binawasan ng kaunti ang space para balance tingnan
 
               // LOGIN BUTTON
               SizedBox(
