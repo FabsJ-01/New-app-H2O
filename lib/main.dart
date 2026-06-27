@@ -32,10 +32,18 @@ bool _isWithinActiveHours() {
 }
 
 double _calculateWorkmanagerDOHGoal(int age, String gender) {
-  if (age >= 19 && age <= 59) return (gender == "Male") ? 3000.0 : 2300.0;
-  if (age >= 16 && age <= 18) return (gender == "Male") ? 2600.0 : 2200.0;
-  if (age >= 13 && age <= 15) return (gender == "Male") ? 2400.0 : 2100.0;
-  return 2000.0;
+  bool isMale = gender == "Male";
+
+  // Adult (18 pataas) — College students + Faculty/Staff (kasama ang 18 yo na nasa college na)
+  if (age >= 18) return isMale ? 2900.0 : 2200.0;
+
+  // Older Adolescent (16–17) — Senior High
+  if (age >= 16) return isMale ? 2600.0 : 2000.0;
+
+  // Younger Adolescent (13–15) — Junior High
+  if (age >= 13) return isMale ? 2400.0 : 2000.0;
+
+  return 1500.0;
 }
 
 @pragma('vm:entry-point')

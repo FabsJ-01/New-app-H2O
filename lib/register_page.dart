@@ -26,11 +26,13 @@ class _RegisterPageState extends State<RegisterPage> {
   bool isPasswordVisible = false;
 
   final List<String> genders = ['Male', 'Female'];  
-  final List<String> roles = ['Student', 'Faculty member', 'Utility'];
+  final List<String> roles = ['Student', 'Faculty Member', 'Utility'];
   
-  // MGA LISTAHAN PARA SA AKADEMIKONG DETALYE
   final List<String> years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-  final List<String> courses = ['Bachelor of Science in Information Technology', 'Bachelor of Science in Accountancy', 'Bachelor of Science in Civil Engineering', 'Bachelor of Elementary Education', 'Bachelor of Science in Tourism Management', 'Bachelor of Science in Business Administration','Bachelor of Science in Psychology']; // Pwede mong dagdagan o palitan ang mga kurso rito sa PSU
+  final List<String> courses = ['Bachelor of Science in Information Technology', 
+  'Bachelor of Science in Entrepreneurship', 'Bachelor of Science in Civil Engineering', 
+  'Bachelor of Elementary Education', 'Bachelor of Science in Tourism Management', 
+  'Bachelor of Science in Business Administration Major in Marketing','Bachelor of Science in Psychology']; 
 
   String? validatePassword(String value) {
     if (value.length < 8) return "At least 8 characters required";
@@ -42,7 +44,7 @@ class _RegisterPageState extends State<RegisterPage> {
     // 1. Pangunahing Validation check
     if (idController.text.isEmpty || ageController.text.isEmpty || selectedGender == null || selectedRole == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pakisagutan ang lahat ng fields."), backgroundColor: Colors.orange),
+        const SnackBar(content: Text("Fill out all required fields."), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -51,7 +53,7 @@ class _RegisterPageState extends State<RegisterPage> {
     if (selectedRole == 'Student') {
       if (selectedCourse == null || selectedYear == null || sectionController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Pakisagutan ang Course, Year, at Section para sa Estudyante."), backgroundColor: Colors.orange),
+          const SnackBar(content: Text("Fill out all required fields for the student."), backgroundColor: Colors.orange),
         );
         return;
       }
