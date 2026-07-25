@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart'; // Gamitin natin ang Realtime Database
-import 'admin_dashboard.dart'; // Siguraduhing tama ang import path
+import 'package:firebase_database/firebase_database.dart';
+import 'admin_dashboard.dart';
 
 class AdminRegisterPage extends StatefulWidget {
   const AdminRegisterPage({super.key});
@@ -24,6 +24,7 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
   // State for UI
   bool _isObscured = true;
   bool _isConfirmObscured = true;
+  bool _isLoading = false;
   String _selectedGender = 'Male';
 
   // Password Validator
@@ -33,6 +34,97 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
     if (!RegExp(r'(?=.*[a-z])').hasMatch(value)) return 'Must contain a lowercase letter';
     if (!RegExp(r'(?=.*[A-Z])').hasMatch(value)) return 'Must contain an uppercase letter';
     return null;
+  }
+
+  // Firebase Register Logic
+  Future<void> _registerAdmin() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Step 1: Create user in Firebase Auth
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passController.text.trim(),
+      );
+
+      // Step 2: Save admin details in Realtime Database
+      DatabaseReference adminRef = FirebaseDatabase.instance
+          .ref("admins/${userCredential.user!.uid}");
+
+      await adminRef.set({
+        'psu_id': _idController.text.trim(),
+        'name': _nameController.text.trim(),
+        'age': _ageController.text.trim(),
+        'gender': _selectedGender,
+        'role': 'Admin',
+        'email': _emailController.text.trim(),
+        'created_at': ServerValue.timestamp,
+      });
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+
+        // Step 3: Show success message then redirect
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Admin account created successfully!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Step 4: Redirect to Admin Dashboard
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const AdminDashboard()),
+          (route) => false,
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      // Handle specific Firebase Auth errors with clear messages
+      setState(() => _isLoading = false);
+
+      String errorMessage;
+
+      switch (e.code) {
+        case 'email-already-in-use':
+          errorMessage = "This email is already registered. Please use a different email.";
+          break;
+        case 'invalid-email':
+          errorMessage = "Invalid email format. Please enter a valid email.";
+          break;
+        case 'weak-password':
+          errorMessage = "Password is too weak. Please choose a stronger password.";
+          break;
+        case 'permission-denied':
+          errorMessage = "Permission denied. Please contact the system administrator.";
+          break;
+        default:
+          errorMessage = "Registration failed: ${e.message}";
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Unexpected error: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -48,7 +140,7 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(15),
-              boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 20)],
+              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
             ),
             child: Form(
               key: _formKey,
@@ -56,8 +148,14 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Center(
-                    child: Text("H2O ADMIN REGISTRATION", 
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blue)),
+                    child: Text(
+                      "H2O ADMIN REGISTRATION",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 30),
 
@@ -66,13 +164,19 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
 
                   Row(
                     children: [
-                      Expanded(child: _buildTextField(_ageController, "Age", Icons.cake, isNumber: true)),
+                      Expanded(
+                        child: _buildTextField(
+                          _ageController, "Age", Icons.cake, isNumber: true
+                        )
+                      ),
                       const SizedBox(width: 20),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          initialValue: _selectedGender,
+                          value: _selectedGender,
                           decoration: const InputDecoration(labelText: "Gender"),
-                          items: ['Male', 'Female'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                          items: ['Male', 'Female']
+                              .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                              .toList(),
                           onChanged: (val) => setState(() => _selectedGender = val!),
                         ),
                       ),
@@ -80,8 +184,9 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
                   ),
 
                   const SizedBox(height: 15),
-                  _buildTextField(_emailController, "Admin Email (Login)", Icons.email),
+                  _buildTextField(_emailController, "Admin Email", Icons.email),
 
+                  // Password Field
                   TextFormField(
                     controller: _passController,
                     obscureText: _isObscured,
@@ -90,7 +195,9 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
                       labelText: "Password",
                       prefixIcon: const Icon(Icons.lock),
                       suffixIcon: IconButton(
-                        icon: Icon(_isObscured ? Icons.visibility_off : Icons.visibility),
+                        icon: Icon(
+                          _isObscured ? Icons.visibility_off : Icons.visibility
+                        ),
                         onPressed: () => setState(() => _isObscured = !_isObscured),
                       ),
                     ),
@@ -98,35 +205,66 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
 
                   const SizedBox(height: 15),
 
+                  // Confirm Password Field
                   TextFormField(
                     controller: _confirmPassController,
                     obscureText: _isConfirmObscured,
-                    validator: (val) => val != _passController.text ? "Passwords do not match" : null,
+                    validator: (val) =>
+                        val != _passController.text ? "Passwords do not match" : null,
                     decoration: InputDecoration(
                       labelText: "Retype Password",
                       prefixIcon: const Icon(Icons.lock_reset),
                       suffixIcon: IconButton(
-                        icon: Icon(_isConfirmObscured ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setState(() => _isConfirmObscured = !_isConfirmObscured),
+                        icon: Icon(
+                          _isConfirmObscured ? Icons.visibility_off : Icons.visibility
+                        ),
+                        onPressed: () => setState(
+                          () => _isConfirmObscured = !_isConfirmObscured
+                        ),
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 30),
 
+                  // Register Button with Loading Indicator
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[800]),
-                      onPressed: _registerAdmin,
-                      child: const Text("CREATE ADMIN ACCOUNT", style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[800],
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: _isLoading ? null : _registerAdmin,
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : const Text(
+                              "CREATE ADMIN ACCOUNT",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
+
                   const SizedBox(height: 10),
+
+                  // Back to Login
                   Center(
                     child: TextButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _isLoading ? null : () => Navigator.pop(context),
                       child: const Text("Back to Login"),
                     ),
                   ),
@@ -139,60 +277,23 @@ class _AdminRegisterPageState extends State<AdminRegisterPage> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isNumber = false}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool isNumber = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: TextFormField(
         controller: controller,
         keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
-        validator: (val) => val!.isEmpty ? "Required" : null,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+        ),
+        validator: (val) => val!.isEmpty ? "This field is required." : null,
       ),
     );
-  }
-
-  // Firebase Logic
-  Future<void> _registerAdmin() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        // 1. Create User sa Auth
-        UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passController.text.trim(),
-        );
-
-        // 2. Save Admin Details (Gamit ang Realtime Database para synchronize sa Hardware)
-        DatabaseReference adminRef = FirebaseDatabase.instance.ref("admins/${userCredential.user!.uid}");
-        
-        await adminRef.set({
-          'psu_id': _idController.text.trim(),
-          'name': _nameController.text.trim(),
-          'age': _ageController.text.trim(),
-          'gender': _selectedGender,
-          'role': 'Admin',
-          'email': _emailController.text.trim(),
-          'created_at': ServerValue.timestamp,
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Admin Registered Successfully!")),
-          );
-
-          // 3. ETO YUNG DINAGDAG KO: Direct na agad sa Dashboard
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const AdminDashboard()),
-            (route) => false, // Tinatanggal lahat ng previous screens para iwas back button sa login
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error: ${e.toString()}"))
-          );
-        }
-      }
-    }
   }
 }

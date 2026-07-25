@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
+import 'section_detail_page.dart';
 
 class LeaderboardDetailPage extends StatefulWidget {
   const LeaderboardDetailPage({super.key});
@@ -357,17 +358,46 @@ class _LeaderboardDetailPageState extends State<LeaderboardDetailPage> {
                     itemCount: sectionData.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      String sectionName = sectionData.keys.elementAt(index);
-                      double volume = sectionData.values.elementAt(index);
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(sectionName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                        trailing: Text(
-                          "${volume.toStringAsFixed(2)} L",
-                          style: TextStyle(fontWeight: FontWeight.bold, color: getCourseColor(_selectedCourse!)),
-                        ),
-                      );
-                    },
+  String sectionName = sectionData.keys.elementAt(index);
+  double volume = sectionData.values.elementAt(index);
+  return ListTile(
+    contentPadding: EdgeInsets.zero,
+    title: Text(
+      sectionName,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+    ),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          "${volume.toStringAsFixed(2)} L",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: getCourseColor(_selectedCourse!),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Icon(
+          Icons.arrow_forward_ios,
+          size: 14,
+          color: Colors.grey,
+        ),
+      ],
+    ),
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SectionDetailPage(
+            sectionName: sectionName,
+            courseCode: _selectedCourse!,
+            courseColor: getCourseColor(_selectedCourse!),
+          ),
+        ),
+      );
+    },
+  );
+},
                   ),
               ],
             ),
