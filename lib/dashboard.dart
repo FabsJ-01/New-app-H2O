@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -24,7 +25,10 @@ class _DashboardState extends State<Dashboard> {
   int age = 19;
   bool _isMachineReady = false; 
   String? localUid;
-  bool _notificationsEnabled = true; 
+  bool _notificationsEnabled = true;
+
+  // FIX: StreamSubscription para maiwasan ang duplicate listeners
+  StreamSubscription? _userListener;
 
   final DatabaseReference _dbRef = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
@@ -36,6 +40,13 @@ class _DashboardState extends State<Dashboard> {
     super.initState();
     _loadOfflineData();
     _activateListeners();
+  }
+
+  // FIX: Dispose listener para walang memory leak
+  @override
+  void dispose() {
+    _userListener?.cancel();
+    super.dispose();
   }
 
   void _showWeeklyStats() {
@@ -83,15 +94,28 @@ class _DashboardState extends State<Dashboard> {
 
     if (value) {
       NotificationScheduler.scheduleDailyReminders();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("H2O Reminders: ON 💧"), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("H2O Reminders: ON 💧"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } else {
-      await NotificationScheduler.cancelAllReminders(); 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("H2O Reminders: OFF 🔕 (Notifications paused)"), backgroundColor: Colors.orange),
-      );
+      await NotificationScheduler.cancelAllReminders();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("H2O Reminders: OFF 🔕 (Notifications paused)"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     }
+
+    // FIX: Re-activate listeners after toggle
+    _activateListeners();
   }
 
   void _showQRDialog() {
@@ -100,7 +124,11 @@ class _DashboardState extends State<Dashboard> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Your Personal QR", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Your Personal QR",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -110,11 +138,17 @@ class _DashboardState extends State<Dashboard> {
               size: 200.0,
             ),
             const SizedBox(height: 10),
-            const Text("Scan at the PSU H2O Hub", textAlign: TextAlign.center),
+            const Text(
+              "Scan at the PSU H2O Hub",
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CLOSE")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CLOSE"),
+          ),
         ],
       ),
     );
@@ -124,50 +158,47 @@ class _DashboardState extends State<Dashboard> {
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
     if (currentUid != null) {
       await _dbRef.child('users/$currentUid').update({'coin_trigger': true});
-      _sendNotification("Dispensing Initiated 💧", "System active. Please ensure your container is properly positioned.");
+      _sendNotification(
+        "Dispensing Initiated 💧",
+        "System active. Please ensure your container is properly positioned.",
+      );
     }
   }
 
-  // UPDATED: Accurate DOH/WHO values para sa university setting (13–59 years old)
   double calculateDOHGoal(int age, String gender) {
     bool isMale = gender == "Male";
-
-    // Adult (18 pataas) — College students + Faculty/Staff (kasama ang 18 yo na nasa college na)
     if (age >= 18) return isMale ? 2900.0 : 2200.0;
-
-    // Older Adolescent (16–18) — Senior High
     if (age >= 16) return isMale ? 2600.0 : 2000.0;
-
-    // Younger Adolescent (13–15) — Junior High
     if (age >= 13) return isMale ? 2400.0 : 2000.0;
-
-    // Default fallback
     return 1500.0;
   }
 
   Future<void> _checkAndResetDailyIntake(String uid, Map data) async {
-  String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-  String lastUpdate = data['update']?.toString() ?? "";
+    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    String lastUpdate = data['update']?.toString() ?? "";
 
-  if (today != lastUpdate) {
-    int lastIntake = int.tryParse(data['intake']?.toString() ?? "0") ?? 0;
+    if (today != lastUpdate) {
+      int lastIntake = int.tryParse(data['intake']?.toString() ?? "0") ?? 0;
 
-    // GUARD: I-save sa history kung may valid date lang ang lastUpdate
-    if (lastUpdate.isNotEmpty && lastIntake > 0) {
-      await _dbRef.child('history/$uid/$lastUpdate').set(lastIntake);
+      if (lastUpdate.isNotEmpty && lastIntake > 0) {
+        await _dbRef.child('history/$uid/$lastUpdate').set(lastIntake);
+      }
+
+      await _dbRef.child('users/$uid').update({
+        'intake': 0,
+        'update': today,
+      });
     }
-
-    await _dbRef.child('users/$uid').update({
-      'intake': 0,
-      'update': today,
-    });
   }
-}
 
   void _activateListeners() {
     final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
     if (currentUid != null) {
-      _dbRef.child('users/$currentUid').onValue.listen((event) async {
+
+      // FIX: I-cancel muna ang lumang listener bago mag-subscribe ulit
+      _userListener?.cancel();
+
+      _userListener = _dbRef.child('users/$currentUid').onValue.listen((event) async {
         if (mounted && event.snapshot.value != null) {
           final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
           _checkAndResetDailyIntake(currentUid, data);
@@ -181,35 +212,39 @@ class _DashboardState extends State<Dashboard> {
             age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
             gender = data['gender']?.toString() ?? "Male";
             dailyGoal = calculateDOHGoal(age, gender);
-            _isMachineReady = data['coin_trigger'] == false && data['is_scanning'] == true;
+            // FIX: Updated condition para mas tumpak ang machine ready state
+            _isMachineReady = data['coin_trigger'] == false && 
+                              data['is_scanning'] == true;
           });
 
           if (intakeDisplay > oldIntake) {
-            _sendNotification("H2O Success! ✨", "Thank you for using PSU H2O. Stay Hydrated!");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text("Thank you for using PSU H2O. Stay Hydrated! 💧"),
-                backgroundColor: Colors.blue[900],
-              ),
+            _sendNotification(
+              "H2O Success! ✨",
+              "Thank you for using PSU H2O. Stay Hydrated!",
             );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text("Thank you for using PSU H2O. Stay Hydrated! 💧"),
+                  backgroundColor: Colors.blue[900],
+                ),
+              );
+            }
           }
 
           bool isScanning = data['is_scanning'] == true;
           bool coinTrigger = data['coin_trigger'] == true;
           
           if (wasReady && !isScanning && !coinTrigger) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Session ended. Device is ready for the next user. 📇"),
-                backgroundColor: Colors.green,
-              ),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Session ended. Device is ready for the next user. 📇"),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
           }
-
-          // NOTE: Tinanggal ang "Credits Received" notification dito dahil
-          // duplicate na sa BackgroundService (main.dart onStart()), na siyang
-          // nananatiling tumatakbo kahit closed ang app. Iisang source na lang
-          // ng notification para hindi na mag-double.
 
           await prefs.setDouble('last_intake', intakeDisplay);
         }
@@ -219,7 +254,9 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    double percent = (dailyGoal > 0) ? (intakeDisplay / dailyGoal).clamp(0.0, 1.0) : 0.0;
+    double percent = (dailyGoal > 0) 
+        ? (intakeDisplay / dailyGoal).clamp(0.0, 1.0) 
+        : 0.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FAFD),
@@ -254,7 +291,10 @@ class _DashboardState extends State<Dashboard> {
                 ),
                 child: const Icon(Icons.person_outline, size: 20),
               ),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilePage())),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfilePage()),
+              ),
             ),
           )
         ],
@@ -290,6 +330,7 @@ class _DashboardState extends State<Dashboard> {
                     ),
                     const SizedBox(height: 28),
 
+                    // Circular Progress Indicator
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 50),
                       padding: const EdgeInsets.symmetric(vertical: 30),
@@ -316,8 +357,14 @@ class _DashboardState extends State<Dashboard> {
                               animationDuration: 800,
                               circularStrokeCap: CircularStrokeCap.round,
                               linearGradient: (percent >= 1.0)
-                                  ? LinearGradient(colors: [Colors.green.shade400, Colors.teal.shade300])
-                                  : LinearGradient(colors: [Colors.blue.shade400, Colors.lightBlue.shade300]),
+                                  ? LinearGradient(colors: [
+                                      Colors.green.shade400,
+                                      Colors.teal.shade300,
+                                    ])
+                                  : LinearGradient(colors: [
+                                      Colors.blue.shade400,
+                                      Colors.lightBlue.shade300,
+                                    ]),
                               backgroundColor: Colors.blue.shade50,
                               center: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -334,7 +381,11 @@ class _DashboardState extends State<Dashboard> {
                                   const SizedBox(height: 4),
                                   Text(
                                     "${intakeDisplay.toInt()}ml / ${dailyGoal.toInt()}ml",
-                                    style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -345,6 +396,8 @@ class _DashboardState extends State<Dashboard> {
                     ),
 
                     const SizedBox(height: 30),
+
+                    // Dispense or QR Button
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 28),
                       child: AnimatedSwitcher(
@@ -354,7 +407,10 @@ class _DashboardState extends State<Dashboard> {
                                 key: const ValueKey("dispense"),
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 6,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.green.shade50,
                                       borderRadius: BorderRadius.circular(20),
@@ -362,11 +418,19 @@ class _DashboardState extends State<Dashboard> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.check_circle, size: 16, color: Colors.green.shade600),
+                                        Icon(
+                                          Icons.check_circle,
+                                          size: 16,
+                                          color: Colors.green.shade600,
+                                        ),
                                         const SizedBox(width: 6),
                                         Text(
                                           "System Ready",
-                                          style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 13),
+                                          style: TextStyle(
+                                            color: Colors.green.shade700,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -380,7 +444,10 @@ class _DashboardState extends State<Dashboard> {
                                       gradient: LinearGradient(
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
-                                        colors: [Colors.blue.shade500, Colors.blue.shade700],
+                                        colors: [
+                                          Colors.blue.shade500,
+                                          Colors.blue.shade700,
+                                        ],
                                       ),
                                       boxShadow: [
                                         BoxShadow(
@@ -395,14 +462,19 @@ class _DashboardState extends State<Dashboard> {
                                       child: InkWell(
                                         borderRadius: BorderRadius.circular(20),
                                         onTap: _triggerWaterDispense,
-                                        child: Row(
+                                        child: const Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
-                                          children: const [
+                                          children: [
                                             Icon(Icons.water_drop, size: 26, color: Colors.white),
                                             SizedBox(width: 10),
                                             Text(
                                               "DISPENSE WATER",
-                                              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.3),
+                                              style: TextStyle(
+                                                fontSize: 17,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                                letterSpacing: 0.3,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -420,7 +492,10 @@ class _DashboardState extends State<Dashboard> {
                                   gradient: LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
-                                    colors: [Colors.blue.shade700, Colors.blue.shade900],
+                                    colors: [
+                                      Colors.blue.shade700,
+                                      Colors.blue.shade900,
+                                    ],
                                   ),
                                   boxShadow: [
                                     BoxShadow(
@@ -435,14 +510,18 @@ class _DashboardState extends State<Dashboard> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(18),
                                     onTap: _showQRDialog,
-                                    child: Row(
+                                    child: const Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
+                                      children: [
                                         Icon(Icons.qr_code_2, color: Colors.white),
                                         SizedBox(width: 10),
                                         Text(
                                           "SHOW MY QR CODE",
-                                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.3,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -451,12 +530,17 @@ class _DashboardState extends State<Dashboard> {
                               ),
                       ),
                     ),
+
                     const SizedBox(height: 28),
 
+                    // DOH Goal Info
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 28),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 13,
+                          horizontal: 16,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(16),
@@ -464,13 +548,21 @@ class _DashboardState extends State<Dashboard> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.info_outline_rounded, size: 16, color: Colors.blue.shade700),
+                            Icon(
+                              Icons.info_outline_rounded,
+                              size: 16,
+                              color: Colors.blue.shade700,
+                            ),
                             const SizedBox(width: 8),
                             Flexible(
                               child: Text(
                                 "Goal: ${dailyGoal.toInt()}ml (DOH Guidelines for Age $age)",
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 12.5, color: Colors.blue.shade900, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.blue.shade900,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ],
@@ -480,6 +572,7 @@ class _DashboardState extends State<Dashboard> {
 
                     const SizedBox(height: 14),
 
+                    // Weekly Progress Button
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 28),
                       child: Container(
@@ -524,10 +617,13 @@ class _DashboardState extends State<Dashboard> {
 
                     const SizedBox(height: 18),
 
+                    // Notifications Toggle
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 28),
                       decoration: BoxDecoration(
-                        color: _notificationsEnabled ? Colors.white : Colors.grey.shade50,
+                        color: _notificationsEnabled
+                            ? Colors.white
+                            : Colors.grey.shade50,
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
@@ -538,29 +634,45 @@ class _DashboardState extends State<Dashboard> {
                         ],
                       ),
                       child: SwitchListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
                         title: Text(
-                          _notificationsEnabled ? "Campus Alerts Active" : "Alerts Paused (At Home)",
+                          _notificationsEnabled
+                              ? "Campus Alerts Active"
+                              : "Alerts Paused (At Home)",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
-                            color: _notificationsEnabled ? Colors.blue.shade900 : Colors.grey.shade700,
+                            color: _notificationsEnabled
+                                ? Colors.blue.shade900
+                                : Colors.grey.shade700,
                           ),
                         ),
                         subtitle: Text(
                           "Turn off if you are away from the campus hub",
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
                         ),
                         value: _notificationsEnabled,
                         secondary: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: _notificationsEnabled ? Colors.blue.shade50 : Colors.grey.shade200,
+                            color: _notificationsEnabled
+                                ? Colors.blue.shade50
+                                : Colors.grey.shade200,
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
-                            _notificationsEnabled ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
-                            color: _notificationsEnabled ? Colors.blue.shade700 : Colors.grey,
+                            _notificationsEnabled
+                                ? Icons.notifications_active_rounded
+                                : Icons.notifications_off_rounded,
+                            color: _notificationsEnabled
+                                ? Colors.blue.shade700
+                                : Colors.grey,
                             size: 20,
                           ),
                         ),
