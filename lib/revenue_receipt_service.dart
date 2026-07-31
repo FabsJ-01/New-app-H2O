@@ -166,7 +166,7 @@ class RevenueReceiptService {
                               ),
                             ),
                             pw.Text(
-                              "ID: ${vendo['id']}  •  ₱1:${vendo['mlPerPeso'].toInt()}ml",
+                              "ID: ${vendo['id']}  |  Php1:${vendo['mlPerPeso'].toInt()}ml",
                               style: const pw.TextStyle(
                                 fontSize: 9,
                                 color: PdfColors.grey600,
@@ -191,7 +191,7 @@ class RevenueReceiptService {
                       ),
                       pw.Expanded(
                         child: pw.Text(
-                          "₱${(vendo['revenue'] as double).toStringAsFixed(2)}",
+                          "Php${(vendo['revenue'] as double).toStringAsFixed(2)}",
                           style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold,
                             fontSize: 11,
@@ -240,7 +240,7 @@ class RevenueReceiptService {
                           ),
                         ),
                         pw.Text(
-                          "₱${grandTotal.toStringAsFixed(2)}",
+                          "Php${grandTotal.toStringAsFixed(2)}",
                           style: pw.TextStyle(
                             fontSize: 22,
                             fontWeight: pw.FontWeight.bold,
@@ -275,7 +275,7 @@ class RevenueReceiptService {
                         ),
                       ),
                       pw.Text(
-                        "Admin — Collected by",
+                        "Admin - Collected by",
                         style: const pw.TextStyle(
                           fontSize: 10,
                           color: PdfColors.grey600,

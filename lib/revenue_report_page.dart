@@ -30,16 +30,16 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
   Future<void> _loadAdminInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
+      String adminName = "Admin";
       final snapshot = await _dbRef.child('admins/${user.uid}').get();
       if (snapshot.exists && snapshot.value != null) {
         final data = snapshot.value as Map;
+        adminName = data['name']?.toString() ?? "Admin";
+      }
+
+      if (mounted) {
         setState(() {
-          _adminName = data['name']?.toString() ?? "Admin";
-          _adminEmail = user.email ?? "";
-        });
-      } else {
-        setState(() {
-          _adminName = "Admin";
+          _adminName = adminName;
           _adminEmail = user.email ?? "";
         });
       }
@@ -82,7 +82,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
     setState(() => _isGeneratingPdf = true);
 
     try {
-      // Auto-generate receipt number: RCP-2026-001
       final now = DateTime.now();
       final snapshot = await _dbRef.child('receipts').get();
       int count = 1;
@@ -92,7 +91,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
       String receiptNumber =
           "RCP-${now.year}-${count.toString().padLeft(3, '0')}";
 
-      // Save receipt record to Firebase
       await _dbRef.child('receipts/$receiptNumber').set({
         'receipt_number': receiptNumber,
         'admin_name': _adminName ?? "Admin",
@@ -105,7 +103,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
         'status': 'Generated',
       });
 
-      // Generate and print/download PDF
       await RevenueReceiptService.generateAndPrint(
         receiptNumber: receiptNumber,
         adminName: _adminName ?? "Admin",
@@ -155,88 +152,87 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
     required double totalLiters,
     required int totalDispenses,
   }) async {
-    bool confirm = await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        title: const Text(
+          "Mark as Collected",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Confirm collection of:",
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
-            title: const Text(
-              "Mark as Collected",
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green[200]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "₱${grandTotal.toStringAsFixed(2)}",
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[700],
+                    ),
+                  ),
+                  Text(
+                    "Period: $_selectedFilter",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    "Dispenses: $totalDispenses times",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[700],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              "Confirm Collection",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Confirm collection of:",
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.green[200]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "₱${grandTotal.toStringAsFixed(2)}",
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green[700],
-                        ),
-                      ),
-                      Text(
-                        "Period: $_selectedFilter",
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      Text(
-                        "Dispenses: $totalDispenses times",
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("Cancel"),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text(
-                  "Confirm Collection",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
           ),
-        ) ??
-        false;
+        ],
+      ),
+    );
 
-    if (confirm) {
+    if (confirm == true) {
       final now = DateTime.now();
       await _dbRef.child('collections').push().set({
         'period': _selectedFilter,
@@ -271,6 +267,163 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
     }
   }
 
+  // --- HELPER WIDGETS ---
+
+  Widget _buildFilterDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedFilter,
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+          style: const TextStyle(
+            color: Color(0xFF1E293B),
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+          onChanged: (String? newValue) {
+            if (newValue != null) {
+              setState(() => _selectedFilter = newValue);
+            }
+          },
+          items: _filters.map<DropdownMenuItem<String>>((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGeneratePdfButton({
+    required double grandTotal,
+    required double totalLiters,
+    required int totalDispenses,
+    required List<Map<String, dynamic>> vendoBreakdown,
+    required List<MapEntry<String, double>> sortedVendos,
+    required bool fullWidth,
+  }) {
+    return SizedBox(
+      width: fullWidth ? double.infinity : null,
+      child: ElevatedButton.icon(
+        onPressed: (_isGeneratingPdf || sortedVendos.isEmpty)
+            ? null
+            : () => _generateReceipt(
+                  grandTotal: grandTotal,
+                  totalLiters: totalLiters,
+                  totalDispenses: totalDispenses,
+                  vendoBreakdown: vendoBreakdown,
+                ),
+        icon: _isGeneratingPdf
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.picture_as_pdf_rounded),
+        label: Text(_isGeneratingPdf ? "Generating..." : "Export PDF Receipt"),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue.shade700,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMarkAsCollectedButton({
+    required double grandTotal,
+    required double totalLiters,
+    required int totalDispenses,
+    required List<MapEntry<String, double>> sortedVendos,
+    required bool fullWidth,
+  }) {
+    return SizedBox(
+      width: fullWidth ? double.infinity : null,
+      child: OutlinedButton.icon(
+        onPressed: sortedVendos.isEmpty
+            ? null
+            : () => _markAsCollected(
+                  grandTotal: grandTotal,
+                  totalLiters: totalLiters,
+                  totalDispenses: totalDispenses,
+                ),
+        icon: const Icon(Icons.check_circle_outline_rounded),
+        label: const Text("Mark as Collected"),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.green.shade700,
+          side: BorderSide(color: Colors.green.shade700),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isMobile = MediaQuery.of(context).size.width < 600;
@@ -281,8 +434,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
         return StreamBuilder<DatabaseEvent>(
           stream: _dbRef.child('vendos').onValue,
           builder: (context, vendosSnapshot) {
-
-            // Build vendo maps
             Map<String, String> vendoNames = {};
             Map<String, double> vendoMlPerPeso = {};
 
@@ -295,8 +446,7 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
                   vendoNames[key.toString()] =
                       value['name']?.toString() ?? key.toString();
                   double mlPerPeso = double.tryParse(
-                        value['settings']?['ml_per_peso']?.toString() ??
-                            "100",
+                        value['settings']?['ml_per_peso']?.toString() ?? "100",
                       ) ??
                       100.0;
                   vendoMlPerPeso[key.toString()] = mlPerPeso;
@@ -304,7 +454,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
               });
             }
 
-            // Compute revenue
             Map<String, double> vendoRevenue = {};
             Map<String, double> vendoLiters = {};
             Map<String, int> vendoDispenses = {};
@@ -353,7 +502,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
             double totalLiters =
                 vendoLiters.values.fold(0.0, (a, b) => a + b);
 
-            // Vendo breakdown for PDF
             List<Map<String, dynamic>> vendoBreakdown =
                 sortedVendos.map((e) => {
                       'id': e.key,
@@ -369,7 +517,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   // --- HEADER ---
                   isMobile
                       ? Column(
@@ -575,6 +722,7 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
                                   Icons.local_drink_rounded,
                                   Colors.orange,
                                 ),
+                                const SizedBox(width: 12),
                                 const Expanded(child: SizedBox()),
                               ],
                             ),
@@ -632,14 +780,13 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
                               ),
                               Text(
                                 "Breakdown of earnings per machine",
-                                style:
-                                    TextStyle(fontSize: 12, color: Colors.grey),
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey),
                               ),
                             ],
                           ),
                         ),
                         const Divider(height: 1),
-
                         if (sortedVendos.isEmpty)
                           const Padding(
                             padding: EdgeInsets.all(40),
@@ -673,15 +820,14 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
                             itemBuilder: (context, index) {
                               String vendoId = sortedVendos[index].key;
                               double revenue = sortedVendos[index].value;
-                              double liters = vendoLiters[vendoId] ?? 0;
-                              int dispenses = vendoDispenses[vendoId] ?? 0;
                               String name = vendoNames[vendoId] ?? vendoId;
                               double mlPerPeso =
                                   vendoMlPerPeso[vendoId] ?? 100.0;
 
                               double maxRevenue = sortedVendos.first.value;
-                              double progress =
-                                  maxRevenue > 0 ? revenue / maxRevenue : 0;
+                              double progress = maxRevenue > 0
+                                  ? revenue / maxRevenue
+                                  : 0;
 
                               Color rankColor = index == 0
                                   ? Colors.amber
@@ -707,7 +853,8 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
                                           width: 32,
                                           height: 32,
                                           decoration: BoxDecoration(
-                                            color: rankColor.withOpacity(0.15),
+                                            color:
+                                                rankColor.withOpacity(0.15),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Center(
@@ -759,7 +906,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
                                         ),
                                       ],
                                     ),
-
                                     const SizedBox(height: 12),
 
                                     // Progress bar
@@ -775,26 +921,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
                                         minHeight: 6,
                                       ),
                                     ),
-
-                                    const SizedBox(height: 10),
-
-                                    // Stat chips
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        _buildStatChip(
-                                          Icons.water_drop_outlined,
-                                          "${liters.toStringAsFixed(2)} L dispensed",
-                                          Colors.blue,
-                                        ),
-                                        _buildStatChip(
-                                          Icons.repeat_rounded,
-                                          "$dispenses dispenses",
-                                          Colors.green,
-                                        ),
-                                      ],
-                                    ),
                                   ],
                                 ),
                               );
@@ -809,182 +935,6 @@ class _RevenueReportPageState extends State<RevenueReportPage> {
           },
         );
       },
-    );
-  }
-
-  // Generate PDF Button Widget
-  Widget _buildGeneratePdfButton({
-    required double grandTotal,
-    required double totalLiters,
-    required int totalDispenses,
-    required List<Map<String, dynamic>> vendoBreakdown,
-    required List sortedVendos,
-    required bool fullWidth,
-  }) {
-    return SizedBox(
-      width: fullWidth ? double.infinity : null,
-      child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue[800],
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        onPressed: _isGeneratingPdf || sortedVendos.isEmpty
-            ? null
-            : () => _generateReceipt(
-                  grandTotal: grandTotal,
-                  totalLiters: totalLiters,
-                  totalDispenses: totalDispenses,
-                  vendoBreakdown: vendoBreakdown,
-                ),
-        icon: _isGeneratingPdf
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Icon(Icons.picture_as_pdf_rounded),
-        label: Text(
-          _isGeneratingPdf ? "Generating..." : "Generate PDF Receipt",
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
-
-  // Mark as Collected Button Widget
-  Widget _buildMarkAsCollectedButton({
-    required double grandTotal,
-    required double totalLiters,
-    required int totalDispenses,
-    required List sortedVendos,
-    required bool fullWidth,
-  }) {
-    return SizedBox(
-      width: fullWidth ? double.infinity : null,
-      child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green[700],
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        onPressed: sortedVendos.isEmpty
-            ? null
-            : () => _markAsCollected(
-                  grandTotal: grandTotal,
-                  totalLiters: totalLiters,
-                  totalDispenses: totalDispenses,
-                ),
-        icon: const Icon(Icons.check_circle_rounded),
-        label: const Text(
-          "Mark as Collected",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
-
-  // Filter Dropdown
-  Widget _buildFilterDropdown() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: DropdownButton<String>(
-        value: _selectedFilter,
-        underline: const SizedBox(),
-        icon: const Icon(Icons.keyboard_arrow_down),
-        style: const TextStyle(
-          color: Color(0xFF1E293B),
-          fontWeight: FontWeight.w600,
-          fontSize: 13,
-        ),
-        items: _filters
-            .map((f) => DropdownMenuItem(value: f, child: Text(f)))
-            .toList(),
-        onChanged: (val) {
-          if (val != null) setState(() => _selectedFilter = val);
-        },
-      ),
-    );
-  }
-
-  // Summary Card
-  Widget _buildSummaryCard(
-      String title, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: color, size: 18),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              value,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                color: color,
-              ),
-            ),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.grey, fontSize: 11),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Stat Chip
-  Widget _buildStatChip(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
