@@ -5,7 +5,8 @@ import 'overview_page.dart';
 import 'user_management.dart';
 import 'dispense_logs_page.dart'; 
 import 'analytics_page.dart';
-import 'admin_login.dart'; // Added for logout redirect
+import 'admin_login.dart'; 
+import 'revenue_report_page.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -52,7 +53,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     await FirebaseAuth.instance.signOut();
 
     if (mounted) {
-      // Remove all previous routes and redirect to Admin Login Page
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const AdminLoginPage()),
@@ -283,6 +283,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _buildSidebarItem(Icons.bar_chart, "Analytics & Reports", forceExpand, isDrawer),
         _buildSidebarItem(Icons.assignment, "Dispense Logs", forceExpand, isDrawer),
         _buildSidebarItem(Icons.people, "User Management", forceExpand, isDrawer),
+        _buildSidebarItem(Icons.monetization_on_rounded, "Revenue Report", forceExpand, isDrawer),
 
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 10),
@@ -290,45 +291,51 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
 
         // Add New Unit Button
-        ListTile(
-          horizontalTitleGap: 10,
-          leading: const Icon(
-            Icons.add_circle,
-            color: Color.fromARGB(255, 0, 93, 150),
+        Tooltip(
+          message: forceExpand ? "" : "Add New Unit",
+          child: ListTile(
+            horizontalTitleGap: 10,
+            leading: const Icon(
+              Icons.add_circle,
+              color: Color.fromARGB(255, 0, 93, 150),
+            ),
+            title: forceExpand
+                ? const Text(
+                    "Add New Unit",
+                    style: TextStyle(
+                      color: Color.fromARGB(255, 0, 93, 150),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                : null,
+            onTap: () {
+              if (isDrawer) Navigator.pop(context);
+              _showAddVendoDialog();
+            },
           ),
-          title: forceExpand
-              ? const Text(
-                  "Add New Unit",
-                  style: TextStyle(
-                    color: Color.fromARGB(255, 0, 93, 150),
-                    fontWeight: FontWeight.bold,
-                  ),
-                )
-              : null,
-          onTap: () {
-            if (isDrawer) Navigator.pop(context);
-            _showAddVendoDialog();
-          },
         ),
 
         const Spacer(),
 
         // Logout Button
-        ListTile(
-          horizontalTitleGap: 10,
-          leading: const Icon(
-            Icons.logout,
-            color: Color.fromARGB(179, 219, 33, 33),
+        Tooltip(
+          message: forceExpand ? "" : "Logout",
+          child: ListTile(
+            horizontalTitleGap: 10,
+            leading: const Icon(
+              Icons.logout,
+              color: Color.fromARGB(179, 219, 33, 33),
+            ),
+            title: forceExpand
+                ? const Text(
+                    "Logout",
+                    style: TextStyle(
+                      color: Color.fromARGB(179, 159, 26, 26),
+                    ),
+                  )
+                : null,
+            onTap: _logout,
           ),
-          title: forceExpand
-              ? const Text(
-                  "Logout",
-                  style: TextStyle(
-                    color: Color.fromARGB(179, 159, 26, 26),
-                  ),
-                )
-              : null,
-          onTap: _logout,
         ),
         const SizedBox(height: 20),
       ],
@@ -346,12 +353,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return const DispenseLogsPage();
       case "User Management":
         return const UserManagement();
+      case "Revenue Report":
+        return const RevenueReportPage();
       default:
         return const OverviewPage();
     }
   }
 
-  // Sidebar Item Builder
+  // Sidebar Item Builder with Tooltip Support
   Widget _buildSidebarItem(
     IconData icon,
     String title,
@@ -359,26 +368,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
     bool isDrawer,
   ) {
     bool isSelected = _activeScreen == title;
-    return ListTile(
-      horizontalTitleGap: 10,
-      leading: Icon(
-        icon,
-        color: isSelected ? Colors.blue : Colors.white70,
+    return Tooltip(
+      message: expandText ? "" : title,
+      child: ListTile(
+        horizontalTitleGap: 10,
+        leading: Icon(
+          icon,
+          color: isSelected ? Colors.blue : Colors.white70,
+        ),
+        title: expandText
+            ? Text(
+                title,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.white70,
+                  fontWeight:
+                      isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              )
+            : null,
+        onTap: () {
+          setState(() => _activeScreen = title);
+          if (isDrawer) Navigator.pop(context);
+        },
       ),
-      title: expandText
-          ? Text(
-              title,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white70,
-                fontWeight:
-                    isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            )
-          : null,
-      onTap: () {
-        setState(() => _activeScreen = title);
-        if (isDrawer) Navigator.pop(context);
-      },
     );
   }
 }

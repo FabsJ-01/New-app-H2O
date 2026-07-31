@@ -13,16 +13,32 @@ class AdminLoginPage extends StatefulWidget {
 class _AdminLoginPageState extends State<AdminLoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  // FIX: FocusNode para ma-handle ang Enter key
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
   
   // Variable for password visibility toggle
   bool _isObscured = true;
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
+
   // Login Function with Loading Indicator
   void _login() async {
     if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in all fields.")),
+        const SnackBar(
+          content: Text("Please fill in all fields."),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -43,13 +59,48 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
           MaterialPageRoute(builder: (context) => const AdminDashboard())
         );
       }
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
+
+        // FIX: Specific at friendly error messages
+        String errorMessage;
+        switch (e.code) {
+          case 'user-not-found':
+            errorMessage = "No account found with this email address.";
+            break;
+          case 'wrong-password':
+            errorMessage = "Incorrect password. Please try again.";
+            break;
+          case 'invalid-email':
+            errorMessage = "Invalid email format. Please enter a valid email.";
+            break;
+          case 'user-disabled':
+            errorMessage = "This account has been disabled. Contact your administrator.";
+            break;
+          case 'too-many-requests':
+            errorMessage = "Too many failed attempts. Please try again later.";
+            break;
+          case 'invalid-credential':
+            errorMessage = "Incorrect email or password. Please try again.";
+            break;
+          default:
+            errorMessage = "Login failed. Please check your credentials.";
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Login Failed: ${e.toString()}"),
-            backgroundColor: Colors.red,
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(errorMessage)),
+              ],
+            ),
+            backgroundColor: Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -58,31 +109,74 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
 
   // Forgot Password Function
   void _forgotPassword() async {
-    // Validate email field before sending reset link
     if (_emailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter your email address first.")),
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Text("Please enter your email address first."),
+            ],
+          ),
+          backgroundColor: Colors.orange[700],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       );
       return;
     }
 
     try {
-      // Send password reset email via Firebase Authentication
       await FirebaseAuth.instance.sendPasswordResetEmail(
         email: _emailController.text.trim(),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Password reset link has been sent. Please check your email."),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text("Password reset link has been sent. Please check your email."),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[700],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
       if (mounted) {
+        String errorMessage;
+        switch (e.code) {
+          case 'user-not-found':
+            errorMessage = "No account found with this email address.";
+            break;
+          case 'invalid-email':
+            errorMessage = "Invalid email format. Please enter a valid email.";
+            break;
+          default:
+            errorMessage = "Failed to send reset link. Please try again.";
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString()}")),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(errorMessage)),
+              ],
+            ),
+            backgroundColor: Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         );
       }
     }
@@ -139,9 +233,16 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
                   const SizedBox(height: 20),
                   
                   // Email Input Field
+                  // FIX: onSubmitted — kapag pinindot Enter sa email, lilipat sa password
                   TextField(
                     controller: _emailController,
+                    focusNode: _emailFocusNode,
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) {
+                      // Move focus to password field when Enter is pressed
+                      FocusScope.of(context).requestFocus(_passwordFocusNode);
+                    },
                     decoration: const InputDecoration(
                       labelText: "Email", 
                       prefixIcon: Icon(Icons.email),
@@ -151,9 +252,16 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
                   const SizedBox(height: 15),
                   
                   // Password Input Field with Show/Hide Toggle
+                  // FIX: onSubmitted — kapag pinindot Enter sa password, mag-login agad
                   TextField(
-                    controller: _passwordController, 
+                    controller: _passwordController,
+                    focusNode: _passwordFocusNode,
                     obscureText: _isObscured,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      // Trigger login when Enter is pressed on password field
+                      if (!_isLoading) _login();
+                    },
                     decoration: InputDecoration(
                       labelText: "Password", 
                       prefixIcon: const Icon(Icons.lock),
