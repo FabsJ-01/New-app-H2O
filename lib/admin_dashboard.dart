@@ -108,7 +108,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   "water_level": 100,
                   "wifi_status": "Offline",
                   "force_dispense": false,
-                  "settings": {"ml_per_peso": 200}
+                  "settings": {
+                    "ml_per_peso": 100,
+                    "ms_per_ml": 25.0 // ✅ ISINAMA ANG HARDWARE CALIBRATION DEFAULT RATE
+                  }
                 });
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(

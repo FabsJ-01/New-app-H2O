@@ -210,6 +210,147 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
+  // --- PUMP SPEED CALIBRATION DIALOG ---
+  void _showPumpCalibrationDialog(String vendoId, Map<dynamic, dynamic> vendoData) {
+    final TextEditingController measuredMlController = TextEditingController();
+    
+    double currentMsPerMl = 25.0;
+    if (vendoData['settings'] != null && vendoData['settings']['ms_per_ml'] != null) {
+      currentMsPerMl = (vendoData['settings']['ms_per_ml']).toDouble();
+    }
+    
+    double calculatedMsPerMl = currentMsPerMl;
+    bool isTesting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              title: Row(
+                children: const [
+                  Icon(Icons.tune, color: Colors.blue),
+                  SizedBox(width: 10),
+                  Text("Hardware Flow Calibration", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Unit ID: $vendoId", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const SizedBox(height: 5),
+                    const Text(
+                      "you can adjust the pump timing to ensure accurate water dispensing at the actual mL level.",
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    const Divider(height: 25),
+
+                    // STEP 1
+                    const Text("Step 1: Test Dispense (5 Seconds)", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isTesting ? Colors.grey : Colors.orange,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: isTesting 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.play_arrow, color: Colors.white),
+                        label: Text(
+                          isTesting ? "Dispensing 5 Seconds..." : "Run 5-Second Test",
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        onPressed: isTesting
+                            ? null
+                            : () async {
+                                setModalState(() => isTesting = true);
+                                
+                                await _dbRef.child('vendos/$vendoId/test_dispense_ms').set(5000);
+
+                                await Future.delayed(const Duration(seconds: 5));
+                                if (context.mounted) setModalState(() => isTesting = false);
+                              },
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // STEP 2
+                    const Text("Step 2: Measure in Measuring Cup ", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: measuredMlController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: "How many mL did you measure?",
+                        suffixText: "mL",
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      onChanged: (val) {
+                        double? measuredMl = double.tryParse(val);
+                        if (measuredMl != null && measuredMl > 0) {
+                          setModalState(() {
+                            calculatedMsPerMl = 5000.0 / measuredMl;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    // RESULT PREVIEW
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Calculated Rate:", style: TextStyle(fontSize: 13)),
+                          Text(
+                            "${calculatedMsPerMl.toStringAsFixed(2)} ms/mL",
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                  onPressed: () async {
+                    double finalRate = double.parse(calculatedMsPerMl.toStringAsFixed(2));
+                    await _dbRef.child('vendos/$vendoId/settings/ms_per_ml').set(finalRate);
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      _showSnackBar("Pump calibration saved: $finalRate ms/mL", Colors.green);
+                    }
+                  },
+                  child: const Text("Save Calibration", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -397,7 +538,7 @@ class _OverviewPageState extends State<OverviewPage> {
                   ],
                 ),
                 const Divider(height: 40),
-                _buildPricingConfig(id, mlPerPeso),
+                _buildPricingConfig(id, mlPerPeso, data),
                 const SizedBox(height: 20),
 
                 LayoutBuilder(
@@ -510,7 +651,7 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
-  Widget _buildPricingConfig(String id, int mlPerPeso) {
+  Widget _buildPricingConfig(String id, int mlPerPeso, Map<dynamic, dynamic> vendoData) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
@@ -554,6 +695,21 @@ class _OverviewPageState extends State<OverviewPage> {
                     if (mlPerPeso < 1000) {
                       _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 1);
                     }
+                  },
+                ),
+                const SizedBox(width: 15),
+                // ✅ BAGONG HARDWARE CALIBRATE BUTTON
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.deepOrange,
+                    side: const BorderSide(color: Colors.deepOrange),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.build_outlined, size: 16),
+                  label: const Text("Calibrate Pump Speed", style: TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    _showPumpCalibrationDialog(id, vendoData);
                   },
                 ),
               ],
