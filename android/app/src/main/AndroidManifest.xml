@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"> <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    xmlns:tools="http://schemas.android.com/tools"> 
+    
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -25,7 +27,9 @@
             android:foregroundServiceType="specialUse"
             android:enabled="true"
             android:exported="true" 
-            tools:replace="android:exported" /> <activity 
+            tools:replace="android:exported" /> 
+
+        <activity 
             android:name="com.dev.h2o_psu_lubao.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
@@ -49,7 +53,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        
+
+        <!-- UCROP ACTIVITY PARA SA IMAGE CROPPER (IDINAGDAG DITO) -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
