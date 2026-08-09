@@ -4,11 +4,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:percent_indicator/percent_indicator.dart';
-import 'package:intl/intl.dart'; 
-import 'package:qr_flutter/qr_flutter.dart'; 
+import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_page.dart';
-import 'notification_scheduler.dart'; 
+import 'notification_scheduler.dart';
+// FIX: kailangan i-import ang main.dart dito para magamit ang
+// startHydrationReminders() / stopHydrationReminders() — ito na ang
+// tanging humahawak sa Workmanager reminder chain.
+import 'main.dart';
 import 'weekly_progress_page.dart';
 
 class Dashboard extends StatefulWidget {
@@ -20,10 +24,10 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   double intakeDisplay = 0;
-  double dailyGoal = 2000; 
+  double dailyGoal = 2000;
   String gender = "Male";
   int age = 19;
-  bool _isMachineReady = false; 
+  bool _isMachineReady = false;
   String? localUid;
   bool _notificationsEnabled = true;
   StreamSubscription? _userListener;
@@ -56,7 +60,7 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Future<void> _sendNotification(String title, String body) async {
-    if (!_notificationsEnabled) return; 
+    if (!_notificationsEnabled) return;
     await NotificationScheduler.showInstantNotification(
       title: title,
       body: body,
@@ -66,21 +70,26 @@ class _DashboardState extends State<Dashboard> {
   Future<void> _loadOfflineData() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
-    
+
     if (user != null) {
-      await prefs.setString('user_uid', user.uid); 
+      await prefs.setString('user_uid', user.uid);
     }
 
     setState(() {
       intakeDisplay = prefs.getDouble('last_intake') ?? 0.0;
       localUid = prefs.getString('user_uid') ?? user?.uid;
-      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true; 
+      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
     });
 
+    // FIX: dating tumatawag ito sa scheduleDailyReminders() / 
+    // cancelAllReminders() ng local scheduler — hindi naman kumokontrol
+    // sa Workmanager chain (kaya walang epekto ang toggle sa totoong
+    // reminder na nakikita ng user). Ngayon, ito na mismo ang
+    // nagsisimula/nagtitigil ng Workmanager task.
     if (_notificationsEnabled) {
-      NotificationScheduler.scheduleDailyReminders();
+      await startHydrationReminders();
     } else {
-      NotificationScheduler.cancelAllReminders(); 
+      await stopHydrationReminders();
     }
   }
 
@@ -90,7 +99,9 @@ class _DashboardState extends State<Dashboard> {
     await prefs.setBool('notifications_enabled', value);
 
     if (value) {
-      NotificationScheduler.scheduleDailyReminders();
+      // FIX: Workmanager na ang sinisimulan dito, hindi na ang dating
+      // local zonedSchedule (na isang beses lang papasok bawat 24 oras).
+      await startHydrationReminders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -100,6 +111,9 @@ class _DashboardState extends State<Dashboard> {
         );
       }
     } else {
+      await stopHydrationReminders();
+      // Kanselahin din ang anumang naka-pending na local/instant
+      // notifications para talagang tahimik agad ang app.
       await NotificationScheduler.cancelAllReminders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -211,7 +225,6 @@ class _DashboardState extends State<Dashboard> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Preset buttons
                   Text(
                     "Quick Select:",
                     style: TextStyle(
@@ -282,7 +295,6 @@ class _DashboardState extends State<Dashboard> {
 
                   const SizedBox(height: 16),
 
-                  // Custom input
                   Text(
                     "Or enter custom amount:",
                     style: TextStyle(
@@ -324,7 +336,6 @@ class _DashboardState extends State<Dashboard> {
                     ),
                   ),
 
-                  // Current intake info
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -428,7 +439,6 @@ class _DashboardState extends State<Dashboard> {
     if (currentUid == null) return;
 
     try {
-      // Get current intake
       final snapshot =
           await _dbRef.child('users/$currentUid/intake').get();
       double currentIntake =
@@ -437,13 +447,11 @@ class _DashboardState extends State<Dashboard> {
       double newIntake = currentIntake + mlToAdd;
       String now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
-      // Update intake sa Firebase
       await _dbRef.child('users/$currentUid').update({
         'intake': newIntake,
         'last_drink_time': now,
       });
 
-      // Save sa manual_logs para may history
       await _dbRef
           .child('users/$currentUid/manual_logs')
           .push()
@@ -528,75 +536,73 @@ class _DashboardState extends State<Dashboard> {
   }
 
   void _activateListeners() {
-  final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
-  if (currentUid != null) {
-    _userListener?.cancel();
-    _userListener = _dbRef
-        .child('users/$currentUid')
-        .onValue
-        .listen((event) async {
-      if (mounted && event.snapshot.value != null) {
-        final data =
-            Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-        _checkAndResetDailyIntake(currentUid, data);
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
+    if (currentUid != null) {
+      _userListener?.cancel();
+      _userListener = _dbRef
+          .child('users/$currentUid')
+          .onValue
+          .listen((event) async {
+        if (mounted && event.snapshot.value != null) {
+          final data =
+              Map<dynamic, dynamic>.from(event.snapshot.value as Map);
 
-        final SharedPreferences prefs =
-            await SharedPreferences.getInstance();
-        double oldIntake = intakeDisplay;
-        bool wasReady = _isMachineReady;
+          // FIX: hinihintay na natin ang reset bago mag-setState gamit
+          // ang datos mula sa snapshot, para hindi lumabas nang maikli
+          // yung lumang intake bago biglang bumagsak sa 0.
+          await _checkAndResetDailyIntake(currentUid, data);
 
-        setState(() {
-          intakeDisplay =
-              double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
-          age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
-          gender = data['gender']?.toString() ?? "Male";
-          dailyGoal = calculateDOHGoal(age, gender);
-          _isMachineReady = data['coin_trigger'] == false &&
-              data['is_scanning'] == true;
-        });
+          final SharedPreferences prefs =
+              await SharedPreferences.getInstance();
+          double oldIntake = intakeDisplay;
+          bool wasReady = _isMachineReady;
 
-        // FIX: Hindi mag-trigger ang Thank You sa first load
-        // Mag-trigger lang kapag actual na nag-dispense
-        if (!_isFirstLoad && intakeDisplay > oldIntake) {
-          // NOTE: Tinanggal ang _sendNotification() dito
-          // Ginagawa na ng background service sa main.dart
-          // para lalabas kahit hindi bukas ang app
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text(
-                    "Thank you for using PSU H2O. Stay Hydrated! 💧"),
-                backgroundColor: Colors.blue[900],
-              ),
-            );
+          setState(() {
+            intakeDisplay =
+                double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
+            age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
+            gender = data['gender']?.toString() ?? "Male";
+            dailyGoal = calculateDOHGoal(age, gender);
+            _isMachineReady = data['coin_trigger'] == false &&
+                data['is_scanning'] == true;
+          });
+
+          if (!_isFirstLoad && intakeDisplay > oldIntake) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text(
+                      "Thank you for using PSU H2O. Stay Hydrated! 💧"),
+                  backgroundColor: Colors.blue[900],
+                ),
+              );
+            }
           }
-        }
 
-        // FIX: After first Firebase load — set to false na
-        if (_isFirstLoad) {
-          _isFirstLoad = false;
-        }
-
-        bool isScanning = data['is_scanning'] == true;
-        bool coinTrigger = data['coin_trigger'] == true;
-
-        if (wasReady && !isScanning && !coinTrigger) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    "Session ended. Device is ready for the next user. 📇"),
-                backgroundColor: Colors.green,
-              ),
-            );
+          if (_isFirstLoad) {
+            _isFirstLoad = false;
           }
-        }
 
-        await prefs.setDouble('last_intake', intakeDisplay);
-      }
-    });
+          bool isScanning = data['is_scanning'] == true;
+          bool coinTrigger = data['coin_trigger'] == true;
+
+          if (wasReady && !isScanning && !coinTrigger) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                      "Session ended. Device is ready for the next user. 📇"),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          }
+
+          await prefs.setDouble('last_intake', intakeDisplay);
+        }
+      });
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -677,7 +683,6 @@ class _DashboardState extends State<Dashboard> {
                     ),
                     const SizedBox(height: 28),
 
-                    // Circular Progress
                     Container(
                       margin:
                           const EdgeInsets.symmetric(horizontal: 50),
@@ -750,7 +755,6 @@ class _DashboardState extends State<Dashboard> {
 
                     const SizedBox(height: 30),
 
-                    // QR or Dispense Button
                     Padding(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 28),
@@ -901,7 +905,6 @@ class _DashboardState extends State<Dashboard> {
 
                     const SizedBox(height: 14),
 
-                    // --- LOG WATER INTAKE BUTTON ---
                     Padding(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 28),
@@ -955,7 +958,6 @@ class _DashboardState extends State<Dashboard> {
 
                     const SizedBox(height: 14),
 
-                    // DOH Goal Info
                     Padding(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 28),
@@ -995,7 +997,6 @@ class _DashboardState extends State<Dashboard> {
 
                     const SizedBox(height: 14),
 
-                    // Track Progress Button
                     Padding(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 28),
@@ -1045,7 +1046,6 @@ class _DashboardState extends State<Dashboard> {
 
                     const SizedBox(height: 18),
 
-                    // Notifications Toggle
                     Container(
                       margin:
                           const EdgeInsets.symmetric(horizontal: 28),
