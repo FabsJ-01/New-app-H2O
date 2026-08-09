@@ -30,8 +30,9 @@ class NotificationScheduler {
 
       const notificationDetails = NotificationDetails(android: androidDetails);
 
+      // FIX: Mas unique ang ID para hindi mag-override ang notifications
       await _notifications.show(
-        id: DateTime.now().millisecond % 100000, 
+        id: DateTime.now().millisecondsSinceEpoch % 100000,
         title: title,
         body: body,
         notificationDetails: notificationDetails,

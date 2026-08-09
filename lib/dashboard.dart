@@ -28,6 +28,8 @@ class _DashboardState extends State<Dashboard> {
   bool _notificationsEnabled = true;
   StreamSubscription? _userListener;
 
+  bool _isFirstLoad = true;
+
   final DatabaseReference _dbRef = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
     databaseURL: 'https://h2o-project-e83d9-default-rtdb.firebaseio.com',
@@ -526,69 +528,75 @@ class _DashboardState extends State<Dashboard> {
   }
 
   void _activateListeners() {
-    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
-    if (currentUid != null) {
-      _userListener?.cancel();
-      _userListener = _dbRef
-          .child('users/$currentUid')
-          .onValue
-          .listen((event) async {
-        if (mounted && event.snapshot.value != null) {
-          final data =
-              Map<dynamic, dynamic>.from(event.snapshot.value as Map);
-          _checkAndResetDailyIntake(currentUid, data);
+  final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
+  if (currentUid != null) {
+    _userListener?.cancel();
+    _userListener = _dbRef
+        .child('users/$currentUid')
+        .onValue
+        .listen((event) async {
+      if (mounted && event.snapshot.value != null) {
+        final data =
+            Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        _checkAndResetDailyIntake(currentUid, data);
 
-          final SharedPreferences prefs =
-              await SharedPreferences.getInstance();
-          double oldIntake = intakeDisplay;
-          bool wasReady = _isMachineReady;
+        final SharedPreferences prefs =
+            await SharedPreferences.getInstance();
+        double oldIntake = intakeDisplay;
+        bool wasReady = _isMachineReady;
 
-          setState(() {
-            intakeDisplay =
-                double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
-            age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
-            gender = data['gender']?.toString() ?? "Male";
-            dailyGoal = calculateDOHGoal(age, gender);
-            _isMachineReady = data['coin_trigger'] == false &&
-                data['is_scanning'] == true;
-          });
+        setState(() {
+          intakeDisplay =
+              double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
+          age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
+          gender = data['gender']?.toString() ?? "Male";
+          dailyGoal = calculateDOHGoal(age, gender);
+          _isMachineReady = data['coin_trigger'] == false &&
+              data['is_scanning'] == true;
+        });
 
-          if (intakeDisplay > oldIntake) {
-            _sendNotification(
-              "H2O Success! ✨",
-              "Thank you for using PSU H2O. Stay Hydrated!",
+        // FIX: Hindi mag-trigger ang Thank You sa first load
+        // Mag-trigger lang kapag actual na nag-dispense
+        if (!_isFirstLoad && intakeDisplay > oldIntake) {
+          // NOTE: Tinanggal ang _sendNotification() dito
+          // Ginagawa na ng background service sa main.dart
+          // para lalabas kahit hindi bukas ang app
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                    "Thank you for using PSU H2O. Stay Hydrated! 💧"),
+                backgroundColor: Colors.blue[900],
+              ),
             );
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                      "Thank you for using PSU H2O. Stay Hydrated! 💧"),
-                  backgroundColor: Colors.blue[900],
-                ),
-              );
-            }
           }
-
-          bool isScanning = data['is_scanning'] == true;
-          bool coinTrigger = data['coin_trigger'] == true;
-
-          if (wasReady && !isScanning && !coinTrigger) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                      "Session ended. Device is ready for the next user. 📇"),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-          }
-
-          await prefs.setDouble('last_intake', intakeDisplay);
         }
-      });
-    }
+
+        // FIX: After first Firebase load — set to false na
+        if (_isFirstLoad) {
+          _isFirstLoad = false;
+        }
+
+        bool isScanning = data['is_scanning'] == true;
+        bool coinTrigger = data['coin_trigger'] == true;
+
+        if (wasReady && !isScanning && !coinTrigger) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    "Session ended. Device is ready for the next user. 📇"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+
+        await prefs.setDouble('last_intake', intakeDisplay);
+      }
+    });
   }
+}
 
   @override
   Widget build(BuildContext context) {
