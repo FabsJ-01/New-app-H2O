@@ -56,4 +56,4 @@ class NotificationScheduler {
     await _notifications.cancelAll();
     debugPrint("All local notifications have been cleared.");
   }
-}
+} 

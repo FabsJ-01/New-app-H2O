@@ -25,9 +25,16 @@ import 'dashboard.dart';
 import 'admin_login.dart';
 import 'admin_dashboard.dart';
 
-// --- SHARED CONSTANT: gamitin ito lahat ng file na kailangan mag-refer
+// --- SHARED CONSTANTS: gamitin ito lahat ng file na kailangan mag-refer
 // sa parehong Workmanager task (main.dart at dashboard.dart) ---
 const String kHydrationTaskName = "h2o_hydration_task";
+
+// FIX: bagong flag sa SharedPreferences para malaman kung may naka-schedule
+// na talaga tayong reminder task. Ito ang gagamitin para hindi na basta
+// mag-reset (initialDelay: zero) ang schedule tuwing binubuksan lang ang
+// app — dating dahilan kung bakit paulit-ulit na lumalabas ang "H2O HUB
+// Reminder" sa bawat pag-swipe/pagbukas ng app.
+const String kHydrationScheduledFlagKey = "hydration_reminders_scheduled";
 
 // --- 1. HELPER: Time Restriction ---
 bool _isWithinActiveHours() {
@@ -76,6 +83,11 @@ void callbackDispatcher() {
 
       if (!isNotifEnabled) {
         debugPrint("Workmanager: Notifications disabled. Not rescheduling.");
+        // FIX: i-clear din ang flag dito, para kung sakaling nagbago ang
+        // notifications_enabled nang hindi dumaan sa toggle (edge case),
+        // tama pa rin ang alam ng ensureHydrationRemindersRunning() sa
+        // susunod na pagbukas ng app.
+        await prefs.setBool(kHydrationScheduledFlagKey, false);
         // Sadyang hindi na tayo mag-re-register dito — responsibilidad na
         // ng dashboard.dart toggle (startHydrationReminders /
         // stopHydrationReminders) ang mag-restart nito kapag na-enable ulit.
@@ -128,11 +140,35 @@ void callbackDispatcher() {
               nextDelayMinutes = 30;
               if (intake < dailyGoal) {
                 int kulang = dailyGoal - intake.toInt();
-                debugPrint("Workmanager: Sending reminder, kulang: $kulang");
+
+                // FIX: streak counter — bumibilang kung ilang beses na
+                // sunod-sunod (kada 30 min) hindi pa nag-dispense ang
+                // user. Ginagamit para pumili ng iba't ibang message
+                // sa bawat pag-ulit, imbes na paulit-ulit lang na
+                // "Student, you have Xml left" — layunin, kulitin nang
+                // mas nakaka-engganyo ang user sa halip na sanayin
+                // siyang i-ignore ang paulit-ulit na parehong text.
+                int streak = (prefs.getInt('reminder_streak_count') ?? 0) + 1;
+                await prefs.setInt('reminder_streak_count', streak);
+
+                 final List<String> reminderMessages = [
+                  "Student, you have $kulang ml left! Dispense now at the nearest H2O hub.",
+                  "Hey, you haven't dispensed yet! You still need ${kulang}ml to reach today's goal.",
+                  "Reminder: you're still ${kulang}ml short. Hydrate now before you get dehydrated!",
+                  "You've been reminded a few times now — only ${kulang}ml left. Go dispense already!",
+                  "You might have forgotten — you still need to drink ${kulang}ml today. Do it now!",
+                ];
+                // Escalate papunta sa dulo ng list habang tumataas ang
+                // streak, tapos manatili sa pinaka-persistent na
+                // message (huling entry) kung lampas na sa list length.
+                int messageIndex = (streak - 1).clamp(0, reminderMessages.length - 1);
+                String chosenMessage = reminderMessages[messageIndex];
+
+                debugPrint(
+                    "Workmanager: Sending reminder #$streak, kulang: $kulang");
                 await NotificationScheduler.showInstantNotification(
                   title: "H2O HUB Reminder 💧",
-                  body:
-                      "Student, you have $kulang ml left! Dispense now at the nearest H2O hub.",
+                  body: chosenMessage,
                 );
               }
             } else {
@@ -140,6 +176,10 @@ void callbackDispatcher() {
               debugPrint(
                   "Workmanager: Intake increased, resetting interval to 60 mins.");
               await prefs.setDouble('last_background_intake', intake);
+              // FIX: i-reset ang streak counter dahil nag-dispense na
+              // ang user — babalik sa unang (pinaka-gentle) na message
+              // sa susunod na hindi-pa-nag-dispense na round.
+              await prefs.setInt('reminder_streak_count', 0);
             }
           }
         }
@@ -314,9 +354,11 @@ Future<void> initializeBackgroundService() async {
 }
 
 // --- 4. PUBLIC HELPERS: gamitin ito sa dashboard.dart toggle ---
-// FIX: ito na ang TANGING entry point para simulan ang reminder chain.
-// Dating hindi tinatawag ng dashboard.dart toggle ang Workmanager mismo —
-// ngayon, ito na mismo ang kokonektado sa switch.
+// FIX: ito ang gagamitin kapag EXPLICIT na aksyon ng user ang nagpapatakbo
+// nito (i.e. i-tap ang toggle papuntang ON). Sadyang agad itong tatakbo
+// (initialDelay: zero) dahil malinaw na intensyon ng user na simulan ito
+// NGAYON DIN. Hindi ito dapat tawagin sa tuwing bubukas lang ang app —
+// gamitin sa halip ang ensureHydrationRemindersRunning() sa ibaba.
 Future<void> startHydrationReminders() async {
   await Workmanager().registerOneOffTask(
     kHydrationTaskName,
@@ -325,12 +367,41 @@ Future<void> startHydrationReminders() async {
     constraints: Constraints(networkType: NetworkType.connected),
     existingWorkPolicy: ExistingWorkPolicy.replace,
   );
-  debugPrint("Workmanager: Hydration reminders started.");
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(kHydrationScheduledFlagKey, true);
+  debugPrint("Workmanager: Hydration reminders started (immediate).");
 }
 
 Future<void> stopHydrationReminders() async {
   await Workmanager().cancelByUniqueName(kHydrationTaskName);
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(kHydrationScheduledFlagKey, false);
   debugPrint("Workmanager: Hydration reminders stopped.");
+}
+
+// FIX: BAGONG function — ito ang gagamitin sa dashboard.dart
+// `_loadOfflineData()` (ibig sabihin, sa TUWING binubuksan ang app).
+// Kaibahan sa startHydrationReminders(): hindi nito basta ini-reset ang
+// schedule papuntang "tumakbo agad" kung meron nang tumatakbo — titignan
+// muna nito ang naka-save na flag. Kung meron nang naka-schedule,
+// hahayaan na lang itong tumakbo sa dati niyang oras — hindi na
+// mag-re-register ng bago. Ito ang solusyon sa dating bug kung saan
+// paulit-ulit lumalabas ang "H2O HUB Reminder" sa BAWAT pagbukas/swipe
+// ng app.
+Future<void> ensureHydrationRemindersRunning() async {
+  final prefs = await SharedPreferences.getInstance();
+  bool alreadyScheduled =
+      prefs.getBool(kHydrationScheduledFlagKey) ?? false;
+
+  if (alreadyScheduled) {
+    debugPrint(
+        "Workmanager: Reminders already scheduled — hindi na re-restart.");
+    return;
+  }
+
+  // Wala pang naka-schedule (bagong install, o kasunod ng disable→enable
+  // na hindi dumaan sa toggle) — dito lang tayo talaga magsi-simula.
+  await startHydrationReminders();
 }
 
 // --- 5. MAIN ENTRY POINT ---
@@ -358,10 +429,12 @@ void main() async {
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-    // FIX: gamitin na yung shared helper imbes na duplicate na
-    // registerOneOffTask call dito.
+    // FIX: gamitin ang ensureHydrationRemindersRunning() dito imbes na
+    // startHydrationReminders() — kung may buhay na task pa mula sa
+    // nakaraang session (hal. app restart lang, hindi fresh install),
+    // hindi na natin ito i-re-reset papuntang "tumakbo agad."
     if (prefs.getBool('notifications_enabled') ?? true) {
-      await startHydrationReminders();
+      await ensureHydrationRemindersRunning();
     }
 
     await initializeBackgroundService();

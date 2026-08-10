@@ -86,8 +86,16 @@ class _DashboardState extends State<Dashboard> {
     // sa Workmanager chain (kaya walang epekto ang toggle sa totoong
     // reminder na nakikita ng user). Ngayon, ito na mismo ang
     // nagsisimula/nagtitigil ng Workmanager task.
+    //
+    // FIX #2: gamit na natin ang ensureHydrationRemindersRunning() dito
+    // imbes na startHydrationReminders() — dating dahilan kung bakit
+    // paulit-ulit lumalabas ang "H2O HUB Reminder" sa BAWAT pagbukas ng
+    // app: dati, bawat call dito ay basta nag-re-reset ng schedule
+    // papuntang "tumakbo agad" (initialDelay: zero), kahit may naka-
+    // schedule na. Ngayon, titignan muna kung meron nang tumatakbo —
+    // kung meron, hahayaan na lang itong tumakbo sa tamang oras.
     if (_notificationsEnabled) {
-      await startHydrationReminders();
+      await ensureHydrationRemindersRunning();
     } else {
       await stopHydrationReminders();
     }
