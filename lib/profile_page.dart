@@ -34,6 +34,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String userCourse = "";
   String userYear = "";
   String userSection = "";
+  String userGender = ""; // ADDED: para makuha at maipakita ang gender
   String? cloudImageUrl;
   bool isLoading = true;
   bool isUploadingImage = false;
@@ -85,6 +86,10 @@ class _ProfilePageState extends State<ProfilePage> {
               userCourse = data['course']?.toString() ?? 'N/A';
               userYear = data['year']?.toString() ?? 'N/A';
               userSection = data['section']?.toString() ?? 'N/A';
+              // ADDED: kunin ang gender mula Firebase, gamit ang parehong
+              // key ('gender') na ginagamit din sa dashboard.dart para sa
+              // DOH goal calculation.
+              userGender = data['gender']?.toString() ?? 'N/A';
               cloudImageUrl = data['profileImageUrl']?.toString();
             });
           }
@@ -200,7 +205,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     // 1. I-crop muna ang napiling larawan
     File? croppedFile = await _cropImage(File(pickedFile.path));
-    
+
     // Kung kina-cancel ng user ang pag-crop, wag ituloy ang upload
     if (croppedFile == null) return;
 
@@ -393,6 +398,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 25),
                   const Divider(),
                   const SizedBox(height: 10),
+                  // ADDED: Gender row — palaging ipinapakita (hindi
+                  // kondisyonal sa Student role), dahil pangkalahatang
+                  // profile field ito, hindi student-specific tulad ng
+                  // Course/Year/Section.
+                  _buildProfileInfoRow(Icons.wc, "Gender", userGender),
+                  const SizedBox(height: 15),
                   if (userRole == "Student" && userCourse != "N/A") ...[
                     _buildProfileInfoRow(Icons.school, "Course", userCourse),
                     const SizedBox(height: 15),
