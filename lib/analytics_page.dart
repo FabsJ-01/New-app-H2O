@@ -49,8 +49,8 @@ class AnalyticsPage extends StatelessWidget {
 
                 const SizedBox(height: 25),
 
-                // 3. WEEKLY CONSUMPTION PREVIEW CARD (Nag-navigate sa full page)
-                _WeeklyConsumptionPreviewCard(logsSnapshot: logsSnapshot),
+                // 3. DYNAMIC CONSUMPTION PREVIEW CARD (Weekly / Monthly / Yearly)
+                _ConsumptionPreviewCard(logsSnapshot: logsSnapshot),
 
                 const SizedBox(height: 40),
               ],
@@ -63,27 +63,46 @@ class AnalyticsPage extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// PREVIEW CARD — Summary ng weekly data, click → WeeklyConsumptionPage
+// DYNAMIC PREVIEW CARD — Weekly / Monthly / Yearly Toggle
 // ---------------------------------------------------------------------------
-class _WeeklyConsumptionPreviewCard extends StatelessWidget {
+class _ConsumptionPreviewCard extends StatefulWidget {
   final AsyncSnapshot<DatabaseEvent> logsSnapshot;
 
-  const _WeeklyConsumptionPreviewCard({required this.logsSnapshot});
+  const _ConsumptionPreviewCard({required this.logsSnapshot});
 
-  /// Kinukuha ang total liters ngayong linggo para sa quick summary
-  Map<String, double> _computeDailyTotals() {
-    Map<String, double> dailyTotals = {
-      "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 0,
-    };
+  @override
+  State<_ConsumptionPreviewCard> createState() => _ConsumptionPreviewCardState();
+}
 
-    if (logsSnapshot.hasData && logsSnapshot.data!.snapshot.value != null) {
+class _ConsumptionPreviewCardState extends State<_ConsumptionPreviewCard> {
+  String _selectedTimeframe = 'Weekly'; // Options: 'Weekly', 'Monthly', 'Yearly'
+
+  /// Compute totals base sa napiling timeframe
+  Map<String, double> _computeTotals() {
+    Map<String, double> totals = {};
+
+    if (_selectedTimeframe == 'Weekly') {
+      totals = {"Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 0};
+    } else if (_selectedTimeframe == 'Monthly') {
+      totals = {
+        "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0,
+        "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0
+      };
+    } else {
+      // Yearly defaults (3 latest years)
+      int currentYear = DateTime.now().year;
+      totals = {
+        "${currentYear - 2}": 0,
+        "${currentYear - 1}": 0,
+        "$currentYear": 0,
+      };
+    }
+
+    if (widget.logsSnapshot.hasData && widget.logsSnapshot.data!.snapshot.value != null) {
       Map<dynamic, dynamic> logs =
-          logsSnapshot.data!.snapshot.value as Map<dynamic, dynamic>;
+          widget.logsSnapshot.data!.snapshot.value as Map<dynamic, dynamic>;
 
       DateTime ngayon = DateTime.now();
-      DateTime ngayonDito = DateTime(ngayon.year, ngayon.month, ngayon.day);
-      int arawMulaLunes = ngayonDito.weekday - DateTime.monday;
-      DateTime simulaNgLinggo = ngayonDito.subtract(Duration(days: arawMulaLunes));
 
       logs.forEach((key, value) {
         if (value is Map &&
@@ -91,12 +110,35 @@ class _WeeklyConsumptionPreviewCard extends StatelessWidget {
             value.containsKey('amount_ml')) {
           try {
             DateTime logDate = DateTime.parse(value['timestamp'] ?? '');
-            if (logDate.isAfter(simulaNgLinggo.subtract(const Duration(seconds: 1)))) {
-              double liters = (value['amount_ml'] ?? 0) / 1000.0;
-              const dayMap = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"};
-              String? dayKey = dayMap[logDate.weekday];
-              if (dayKey != null) {
-                dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + liters;
+            double liters = (value['amount_ml'] ?? 0) / 1000.0;
+
+            if (_selectedTimeframe == 'Weekly') {
+              DateTime ngayonDito = DateTime(ngayon.year, ngayon.month, ngayon.day);
+              int arawMulaLunes = ngayonDito.weekday - DateTime.monday;
+              DateTime simulaNgLinggo = ngayonDito.subtract(Duration(days: arawMulaLunes));
+
+              if (logDate.isAfter(simulaNgLinggo.subtract(const Duration(seconds: 1)))) {
+                const dayMap = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"};
+                String? dayKey = dayMap[logDate.weekday];
+                if (dayKey != null) {
+                  totals[dayKey] = (totals[dayKey] ?? 0) + liters;
+                }
+              }
+            } else if (_selectedTimeframe == 'Monthly') {
+              if (logDate.year == ngayon.year) {
+                const monthMap = {
+                  1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+                  7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+                };
+                String? monthKey = monthMap[logDate.month];
+                if (monthKey != null) {
+                  totals[monthKey] = (totals[monthKey] ?? 0) + liters;
+                }
+              }
+            } else if (_selectedTimeframe == 'Yearly') {
+              String yearKey = logDate.year.toString();
+              if (totals.containsKey(yearKey)) {
+                totals[yearKey] = (totals[yearKey] ?? 0) + liters;
               }
             }
           } catch (_) {}
@@ -104,25 +146,27 @@ class _WeeklyConsumptionPreviewCard extends StatelessWidget {
       });
     }
 
-    return dailyTotals;
+    return totals;
   }
 
   @override
   Widget build(BuildContext context) {
-    final Map<String, double> dailyTotals = _computeDailyTotals();
-    final double weeklyTotal = dailyTotals.values.fold(0.0, (a, b) => a + b);
+    final Map<String, double> totals = _computeTotals();
+    final double totalLiters = totals.values.fold(0.0, (a, b) => a + b);
 
-    // Pinakamataas na araw ngayong linggo
-    String peakDay = "—";
+    // Peak computation
+    String peakPeriod = "—";
     double peakVal = 0;
-    dailyTotals.forEach((day, val) {
+    totals.forEach((key, val) {
       if (val > peakVal) {
         peakVal = val;
-        peakDay = day;
+        peakPeriod = key;
       }
     });
 
-    final List<String> days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    String peakLabel = _selectedTimeframe == 'Weekly'
+        ? 'Peak Day'
+        : (_selectedTimeframe == 'Monthly' ? 'Peak Month' : 'Peak Year');
 
     return Material(
       color: Colors.transparent,
@@ -150,32 +194,65 @@ class _WeeklyConsumptionPreviewCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- Card Header ---
+              // --- Card Header + Timeframe Toggle ---
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Icon(Icons.bar_chart_rounded, color: Color(0xFF3B82F6), size: 24),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Weekly Water Consumption Volume",
-                          style: TextStyle(
+                          "$_selectedTimeframe Water Consumption Volume",
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF1E293B),
                           ),
                         ),
                         Text(
-                          "This week's total liters dispensed across all units",
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                          "This ${_selectedTimeframe.toLowerCase()}'s total liters dispensed across all units",
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.arrow_forward_ios_rounded,
-                      color: Color(0xFF3B82F6), size: 14),
+                  // Timeframe Switcher Dropdown
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedTimeframe,
+                        isDense: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF3B82F6)),
+                        style: const TextStyle(
+                          color: Color(0xFF3B82F6),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        onChanged: (String? newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              _selectedTimeframe = newValue;
+                            });
+                          }
+                        },
+                        items: <String>['Weekly', 'Monthly', 'Yearly']
+                            .map<DropdownMenuItem<String>>((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -186,56 +263,69 @@ class _WeeklyConsumptionPreviewCard extends StatelessWidget {
               Row(
                 children: [
                   _StatChip(
-                    label: "Weekly Total",
-                    value: "${weeklyTotal.toStringAsFixed(1)} L",
+                    label: "$_selectedTimeframe Total",
+                    value: "${totalLiters.toStringAsFixed(1)} L",
                     color: const Color(0xFF3B82F6),
                   ),
                   const SizedBox(width: 12),
                   _StatChip(
-                    label: "Peak Day",
-                    value: peakVal > 0 ? "$peakDay (${peakVal.toStringAsFixed(1)}L)" : "—",
+                    label: peakLabel,
+                    value: peakVal > 0 ? "$peakPeriod (${peakVal.toStringAsFixed(1)}L)" : "—",
                     color: const Color(0xFF10B981),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
 
-              // --- Mini Bar Indicators (Day breakdown) ---
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: days.map((day) {
-                  double val = dailyTotals[day] ?? 0;
-                  double maxVal = dailyTotals.values.fold(0.0, (a, b) => a > b ? a : b);
-                  double barHeight = maxVal > 0 ? (val / maxVal) * 48 : 4;
+              // --- Dynamic Mini Bar Indicators ---
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: totals.keys.map((key) {
+                    double val = totals[key] ?? 0;
+                    double maxVal = totals.values.fold(0.0, (a, b) => a > b ? a : b);
+                    double barHeight = maxVal > 0 ? (val / maxVal) * 48 : 4;
 
-                  bool isToday = days[DateTime.now().weekday - 1] == day;
+                    bool isCurrent = false;
+                    if (_selectedTimeframe == 'Weekly') {
+                      isCurrent = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][DateTime.now().weekday - 1] == key;
+                    } else if (_selectedTimeframe == 'Monthly') {
+                      isCurrent = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][DateTime.now().month - 1] == key;
+                    } else {
+                      isCurrent = DateTime.now().year.toString() == key;
+                    }
 
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Container(
-                        width: 28,
-                        height: barHeight.clamp(4.0, 48.0),
-                        decoration: BoxDecoration(
-                          color: isToday
-                              ? const Color(0xFF3B82F6)
-                              : const Color(0xFF3B82F6).withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Container(
+                            width: _selectedTimeframe == 'Monthly' ? 18 : 28,
+                            height: barHeight.clamp(4.0, 48.0),
+                            decoration: BoxDecoration(
+                              color: isCurrent
+                                  ? const Color(0xFF3B82F6)
+                                  : const Color(0xFF3B82F6).withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            key,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                              color: isCurrent ? const Color(0xFF1E293B) : Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        day,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                          color: isToday ? const Color(0xFF1E293B) : Colors.grey,
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
+                    );
+                  }).toList(),
+                ),
               ),
 
               const SizedBox(height: 16),

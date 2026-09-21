@@ -2,215 +2,232 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:firebase_database/firebase_database.dart';
 
-class WeeklyConsumptionSection extends StatefulWidget {
+class WaterConsumptionChartSection extends StatefulWidget {
   final List<String> activeVendoList;
   final String selectedVendo;
 
-  const WeeklyConsumptionSection({
+  const WaterConsumptionChartSection({
     super.key,
     required this.activeVendoList,
     required this.selectedVendo,
   });
 
   @override
-  State<WeeklyConsumptionSection> createState() => _WeeklyConsumptionSectionState();
+  State<WaterConsumptionChartSection> createState() => _WaterConsumptionChartSectionState();
 }
 
-class _WeeklyConsumptionSectionState extends State<WeeklyConsumptionSection> {
+class _WaterConsumptionChartSectionState extends State<WaterConsumptionChartSection> {
   final DatabaseReference _dbLogsRef = FirebaseDatabase.instance.ref('dispense_logs');
+  String _selectedTimeframe = 'Weekly';
 
-  // Auto-generate ng Kulay gamit ang String Hash ng Vendo ID (Para laging consistent)
-  final List<Color> _vendoColors = [
-    const Color(0xFF3B82F6), // Premium Blue (Vendo 1)
-    const Color(0xFF10B981), // Emerald Green (Vendo 2)
-    const Color(0xFFF59E0B), // Warm Amber (Vendo 3)
-    const Color(0xFF6366F1), // Indigo (Vendo 4)
-    const Color(0xFF14B8A6), // Teal (Vendo 5)
-    const Color(0xFFEC4899), // Soft Pink (Vendo 6)
-    const Color(0xFFF97316), // Muted Orange (Vendo 7)
-    const Color(0xFF8B5CF6), // Soft Violet (Vendo 8)
+  final List<Color> _vendoColors = const [
+    Color(0xFF3B82F6),
+    Color(0xFF10B981),
+    Color(0xFFF59E0B),
+    Color(0xFF6366F1),
+    Color(0xFF14B8A6),
+    Color(0xFFEC4899),
+    Color(0xFFF97316),
+    Color(0xFF8B5CF6),
   ];
 
   Color _generateVendoColor(String vendoId) {
     if (vendoId.isEmpty || vendoId == "All Units") {
-      return const Color(0xFF3B82F6); // Default Corporate Blue
+      return const Color(0xFF3B82F6);
     }
-
-    RegExp regExp = RegExp(r'\d+');
-    Match? match = regExp.firstMatch(vendoId);
-
-    int index = match != null ? int.parse(match.group(0)!) - 1 : vendoId.length;
-
-    return _vendoColors[index % _vendoColors.length];
+    final match = RegExp(r'\d+').firstMatch(vendoId);
+    int index = match != null ? (int.tryParse(match.group(0)!) ?? 1) - 1 : vendoId.length;
+    return _vendoColors[index.abs() % _vendoColors.length];
   }
 
-  Map<String, Map<String, double>> _processWeeklyData(Map<dynamic, dynamic> logs) {
-    Map<String, Map<String, double>> stackedWeeklyData = {
-      "Mon": {}, "Tue": {}, "Wed": {}, "Thu": {}, "Fri": {}, "Sat": {}, "Sun": {},
-    };
+  List<String> _getPeriodKeys() {
+    if (_selectedTimeframe == 'Weekly') {
+      return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    } else if (_selectedTimeframe == 'Monthly') {
+      return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    } else {
+      int currentYear = DateTime.now().year;
+      return ["${currentYear - 2}", "${currentYear - 1}", "$currentYear"];
+    }
+  }
 
-    DateTime ngayon = DateTime.now();
-    DateTime ngayonDito = DateTime(ngayon.year, ngayon.month, ngayon.day);
-    int arawMulaLunes = ngayonDito.weekday - DateTime.monday;
-    DateTime simulaNgLinggo = ngayonDito.subtract(Duration(days: arawMulaLunes));
+  Map<String, Map<String, double>> _processConsumptionData(Map<dynamic, dynamic> logs) {
+  List<String> periodKeys = _getPeriodKeys();
+  Map<String, Map<String, double>> stackedData = {
+    for (var key in periodKeys) key: {},
+  };
 
-    logs.forEach((key, value) {
-      if (value is Map && value.containsKey('timestamp') && value.containsKey('amount_ml')) {
-        int amountMl = value['amount_ml'] ?? 0;
-        String timestampStr = value['timestamp'] ?? '';
-        String logVendoId = value['vendo_id'] ?? 'Unknown';
+  debugPrint("--- START PROCESSING LOGS ---");
+  debugPrint("Selected Vendo in Dropdown: '${widget.selectedVendo}'");
+  debugPrint("Selected Timeframe: '$_selectedTimeframe'");
 
-        try {
-          DateTime logDate = DateTime.parse(timestampStr);
+  logs.forEach((key, value) {
+    if (value is Map) {
+      // 1. Kunin ang amount_ml
+      int amountMl = 0;
+      if (value['amount_ml'] is num) {
+        amountMl = (value['amount_ml'] as num).toInt();
+      } else if (value['amount_ml'] != null) {
+        amountMl = int.tryParse(value['amount_ml'].toString()) ?? 0;
+      }
 
-          if (logDate.isAfter(simulaNgLinggo.subtract(const Duration(seconds: 1)))) {
-            bool isVendoMatch = (widget.selectedVendo == "All Units") || (logVendoId == widget.selectedVendo);
+      // 2. Kunin ang vendo_id mula sa database record
+      String logVendoId = value['vendo_id']?.toString() ?? 'Unknown';
 
-            if (isVendoMatch) {
-              int dayOfWeek = logDate.weekday;
-              String dayKey = "";
-              if (dayOfWeek == DateTime.monday) dayKey = "Mon";
-              else if (dayOfWeek == DateTime.tuesday) dayKey = "Tue";
-              else if (dayOfWeek == DateTime.wednesday) dayKey = "Wed";
-              else if (dayOfWeek == DateTime.thursday) dayKey = "Thu";
-              else if (dayOfWeek == DateTime.friday) dayKey = "Fri";
-              else if (dayOfWeek == DateTime.saturday) dayKey = "Sat";
-              else if (dayOfWeek == DateTime.sunday) dayKey = "Sun";
-
-              double liters = amountMl / 1000.0;
-
-              if (stackedWeeklyData.containsKey(dayKey)) {
-                stackedWeeklyData[dayKey]![logVendoId] =
-                    (stackedWeeklyData[dayKey]![logVendoId] ?? 0.0) + liters;
-              }
-            }
+      // 3. Kunin at i-parse ang timestamp
+      dynamic rawTimestamp = value['timestamp'];
+      DateTime? logDate;
+      if (rawTimestamp is int) {
+        logDate = DateTime.fromMillisecondsSinceEpoch(rawTimestamp).toLocal();
+      } else if (rawTimestamp is String) {
+        logDate = DateTime.tryParse(rawTimestamp)?.toLocal();
+        if (logDate == null) {
+          int? parsedInt = int.tryParse(rawTimestamp);
+          if (parsedInt != null) {
+            logDate = DateTime.fromMillisecondsSinceEpoch(parsedInt).toLocal();
           }
-        } catch (e) {
-          print("Error parsing timestamp: $e");
         }
       }
-    });
 
-    return stackedWeeklyData;
-  }
+      // PRINT DEBUG FOR EACH LOG ENTRY
+      debugPrint("LOG ENTRY -> VendoID in DB: '$logVendoId' | Amount: ${amountMl}ml | Date: $logDate");
 
+      if (logDate == null) return;
+
+      // Clean string comparison para iwas sa spaces, underscores, at zeros mismatch
+      String cleanSelected = widget.selectedVendo.trim().toLowerCase().replaceAll('_', '').replaceAll(' ', '');
+      String cleanLogVendo = logVendoId.trim().toLowerCase().replaceAll('_', '').replaceAll(' ', '');
+
+      bool isVendoMatch = (widget.selectedVendo == "All Units") || 
+                          (cleanSelected == cleanLogVendo) ||
+                          (cleanSelected.replaceAll('0', '') == cleanLogVendo.replaceAll('0', ''));
+
+      if (isVendoMatch) {
+        String targetKey = "";
+
+        if (_selectedTimeframe == 'Weekly') {
+          const dayMap = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"};
+          targetKey = dayMap[logDate.weekday] ?? "";
+        } else if (_selectedTimeframe == 'Monthly') {
+          const monthMap = {
+            1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+            7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+          };
+          targetKey = monthMap[logDate.month] ?? "";
+        } else if (_selectedTimeframe == 'Yearly') {
+          targetKey = logDate.year.toString();
+        }
+
+        if (targetKey.isNotEmpty && stackedData.containsKey(targetKey)) {
+          double liters = amountMl / 1000.0;
+          stackedData[targetKey]![logVendoId] =
+              (stackedData[targetKey]![logVendoId] ?? 0.0) + liters;
+          
+          debugPrint(" MATCH FOUND! Added ${liters}L to $targetKey for $logVendoId");
+        }
+      } else {
+        debugPrint(" NO MATCH: DB '$logVendoId' vs Dropdown '${widget.selectedVendo}'");
+      }
+    }
+  });
+
+  debugPrint("--- END PROCESSING LOGS ---");
+  return stackedData;
+}
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    return StreamBuilder(
-      stream: _dbLogsRef.onValue,
-      builder: (context, AsyncSnapshot<DatabaseEvent> logsSnapshot) {
-        Map<String, Map<String, double>> stackedWeeklyData = {
-          "Mon": {}, "Tue": {}, "Wed": {}, "Thu": {}, "Fri": {}, "Sat": {}, "Sun": {},
-        };
+    List<String> legendVendos = widget.activeVendoList.length > 1
+        ? widget.activeVendoList.sublist(1)
+        : [];
 
-        if (logsSnapshot.hasData && logsSnapshot.data!.snapshot.value != null) {
-          Map<dynamic, dynamic> logs =
-              logsSnapshot.data!.snapshot.value as Map<dynamic, dynamic>;
-          stackedWeeklyData = _processWeeklyData(logs);
-        }
-
-        List<String> mgaAraw = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-        List<BarChartGroupData> barGroups = [];
-        double globalMaxY = 5.0;
-
-        for (int i = 0; i < mgaAraw.length; i++) {
-          String day = mgaAraw[i];
-          Map<String, double> vendosInDay = stackedWeeklyData[day]!;
-
-          List<BarChartRodStackItem> stackItems = [];
-          double currentSum = 0.0;
-
-          List<String> sortedVendosInDay = vendosInDay.keys.toList()..sort();
-
-          for (String vId in sortedVendosInDay) {
-            double vVolume = vendosInDay[vId]!;
-            if (vVolume > 0) {
-              Color rodColor = _generateVendoColor(vId);
-
-              if (widget.selectedVendo != "All Units") {
-                rodColor = const Color(0xFF3B82F6);
-              }
-
-              stackItems.add(
-                BarChartRodStackItem(currentSum, currentSum + vVolume, rodColor),
-              );
-              currentSum += vVolume;
-            }
-          }
-
-          if (currentSum > globalMaxY) {
-            globalMaxY = currentSum;
-          }
-
-          barGroups.add(
-            BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: currentSum,
-                  width: 22,
-                  borderRadius: BorderRadius.circular(4),
-                  rodStackItems: stackItems.isEmpty
-                      ? [BarChartRodStackItem(0, 0, const Color(0xFF3B82F6))]
-                      : stackItems,
-                )
-              ],
-            ),
-          );
-        }
-
-        return Container(
-          width: screenWidth > 1100 ? screenWidth * 0.75 : screenWidth * 0.92,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              )
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      width: screenWidth > 1100 ? screenWidth * 0.75 : screenWidth * 0.92,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // HEADER AND TIMEFRAME SELECTOR
+          Wrap(
+            spacing: 20,
+            runSpacing: 15,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Wrap(
-                spacing: 20,
-                runSpacing: 15,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.start,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Weekly Water Consumption Volume",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "Total liters (L) dispensed per day (${widget.selectedVendo} Breakdown)",
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
+                  Text(
+                    "$_selectedTimeframe Water Consumption Volume",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
                   ),
-
-                  // Legend - visible lang kapag "All Units"
-                  if (widget.selectedVendo == "All Units")
+                  const SizedBox(height: 4),
+                  Text(
+                    "Total liters (L) dispensed per ${_selectedTimeframe == 'Weekly' ? 'day' : (_selectedTimeframe == 'Monthly' ? 'month' : 'year')} (${widget.selectedVendo} Breakdown)",
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        key: ValueKey('tf_select_$_selectedTimeframe'),
+                        value: _selectedTimeframe,
+                        isDense: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF3B82F6)),
+                        style: const TextStyle(
+                          color: Color(0xFF3B82F6),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        onChanged: (String? newValue) {
+                          if (newValue != null && newValue != _selectedTimeframe) {
+                            setState(() {
+                              _selectedTimeframe = newValue;
+                            });
+                          }
+                        },
+                        items: const ['Weekly', 'Monthly', 'Yearly']
+                            .map((String value) => DropdownMenuItem<String>(
+                                  value: value,
+                                  child: Text(value),
+                                ))
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  if (widget.selectedVendo == "All Units" && legendVendos.isNotEmpty) ...[
+                    const SizedBox(width: 12),
                     Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: List.generate(widget.activeVendoList.length - 1, (index) {
-                        String vName = widget.activeVendoList[index + 1];
+                      children: legendVendos.map((vName) {
                         return Padding(
-                          padding: const EdgeInsets.only(left: 12.0),
+                          padding: const EdgeInsets.only(left: 8.0),
                           child: Row(
                             children: [
                               Container(
@@ -233,96 +250,180 @@ class _WeeklyConsumptionSectionState extends State<WeeklyConsumptionSection> {
                             ],
                           ),
                         );
-                      }),
+                      }).toList(),
                     ),
+                  ],
                 ],
-              ),
-              const SizedBox(height: 35),
-
-              SizedBox(
-                height: 380,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 10.0, right: 10.0),
-                  child: BarChart(
-                    BarChartData(
-                      maxY: globalMaxY + 1.5,
-                      borderData: FlBorderData(show: false),
-                      gridData: const FlGridData(show: true, drawVerticalLine: false),
-
-                      barTouchData: BarTouchData(
-                        touchTooltipData: BarTouchTooltipData(
-                          getTooltipColor: (group) => const Color(0xFF1E293B),
-                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                            String dayName = mgaAraw[group.x.toInt()];
-                            Map<String, double> dayData = stackedWeeklyData[dayName]!;
-
-                            List<String> sortedVendos = dayData.keys.toList()..sort();
-                            String tooltipContent = "$dayName Summary\n";
-
-                            for (String vid in sortedVendos) {
-                              double vol = dayData[vid] ?? 0.0;
-                              if (vol > 0) {
-                                tooltipContent += "• $vid: ${vol.toStringAsFixed(1)}L\n";
-                              }
-                            }
-
-                            return BarTooltipItem(
-                              tooltipContent.trim(),
-                              const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-
-                      titlesData: FlTitlesData(
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 45,
-                            getTitlesWidget: (value, meta) => Text(
-                              "${value.toStringAsFixed(1)}L",
-                              style: const TextStyle(color: Colors.grey, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 32,
-                            getTitlesWidget: (value, meta) {
-                              if (value.toInt() >= 0 && value.toInt() < mgaAraw.length) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 10.0),
-                                  child: Text(
-                                    mgaAraw[value.toInt()],
-                                    style: const TextStyle(
-                                      color: Color(0xFF1E293B),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                );
-                              }
-                              return const Text('');
-                            },
-                          ),
-                        ),
-                      ),
-                      barGroups: barGroups,
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 35),
+
+          // GRAPH STREAM AREA
+          SizedBox(
+            height: 380,
+            child: StreamBuilder(
+              stream: _dbLogsRef.onValue,
+              builder: (context, AsyncSnapshot<DatabaseEvent> logsSnapshot) {
+                List<String> periodKeys = _getPeriodKeys();
+                Map<String, Map<String, double>> stackedData = {
+                  for (var key in periodKeys) key: {},
+                };
+
+                int dataHash = 0;
+
+                if (logsSnapshot.hasData && logsSnapshot.data!.snapshot.value != null) {
+                  final rawLogs = logsSnapshot.data!.snapshot.value;
+                  if (rawLogs is Map) {
+                    stackedData = _processConsumptionData(rawLogs);
+                    dataHash = rawLogs.length; // Triggers fresh rebuild on new entry
+                  }
+                }
+
+                List<BarChartGroupData> barGroups = [];
+                double globalMaxY = 0.0;
+
+                for (int i = 0; i < periodKeys.length; i++) {
+                  String pKey = periodKeys[i];
+                  Map<String, double> vendosInPeriod = stackedData[pKey] ?? {};
+
+                  List<BarChartRodStackItem> stackItems = [];
+                  double currentSum = 0.0;
+                  List<String> sortedVendosInPeriod = vendosInPeriod.keys.toList()..sort();
+
+                  for (String vId in sortedVendosInPeriod) {
+                    double vVolume = vendosInPeriod[vId] ?? 0.0;
+                    if (vVolume > 0) {
+                      Color rodColor = (widget.selectedVendo != "All Units")
+                          ? const Color(0xFF3B82F6)
+                          : _generateVendoColor(vId);
+
+                      stackItems.add(
+                        BarChartRodStackItem(currentSum, currentSum + vVolume, rodColor),
+                      );
+                      currentSum += vVolume;
+                    }
+                  }
+
+                  if (currentSum > globalMaxY) {
+                    globalMaxY = currentSum;
+                  }
+
+                  barGroups.add(
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: currentSum,
+                          width: _selectedTimeframe == 'Monthly' ? 14 : 22,
+                          borderRadius: BorderRadius.circular(4),
+                          rodStackItems: stackItems.isEmpty
+                              ? [BarChartRodStackItem(0, 0, Colors.transparent)]
+                              : stackItems,
+                        )
+                      ],
+                    ),
+                  );
+                }
+
+                double chartMaxY = (globalMaxY <= 0) ? 10.0 : (globalMaxY * 1.25);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10.0, right: 10.0),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.basic,
+                    child: BarChart(
+                      // Nagdaragdag ng unique key batay sa timeframe, vendo, at data size para ma-clear ang lumang Mouse Tracker states sa Web
+                      key: ValueKey('barchart_${_selectedTimeframe}_${widget.selectedVendo}_$dataHash'),
+                      BarChartData(
+                        maxY: chartMaxY,
+                        borderData: FlBorderData(show: false),
+                        gridData: const FlGridData(show: true, drawVerticalLine: false),
+                        barTouchData: BarTouchData(
+                          enabled: true,
+                          handleBuiltInTouches: true,
+                          touchTooltipData: BarTouchTooltipData(
+                            getTooltipColor: (group) => const Color(0xFF1E293B),
+                            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                              int xIdx = group.x.toInt();
+                              if (xIdx < 0 || xIdx >= periodKeys.length) return null;
+
+                              String periodName = periodKeys[xIdx];
+                              Map<String, double>? periodData = stackedData[periodName];
+                              if (periodData == null) return null;
+
+                              List<String> sortedVendos = periodData.keys.toList()..sort();
+                              String tooltipContent = "$periodName Summary\n";
+                              bool hasDataInBar = false;
+
+                              for (String vid in sortedVendos) {
+                                double vol = periodData[vid] ?? 0.0;
+                                if (vol > 0) {
+                                  tooltipContent += "• $vid: ${vol.toStringAsFixed(1)}L\n";
+                                  hasDataInBar = true;
+                                }
+                              }
+
+                              if (!hasDataInBar) return null;
+
+                              return BarTooltipItem(
+                                tooltipContent.trim(),
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        titlesData: FlTitlesData(
+                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 45,
+                              getTitlesWidget: (value, meta) => Text(
+                                "${value.toStringAsFixed(1)}L",
+                                style: const TextStyle(color: Colors.grey, fontSize: 11),
+                              ),
+                            ),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 32,
+                              getTitlesWidget: (value, meta) {
+                                int index = value.toInt();
+                                if (value == index.toDouble() && index >= 0 && index < periodKeys.length) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 10.0),
+                                    child: Text(
+                                      periodKeys[index],
+                                      style: const TextStyle(
+                                        color: Color(0xFF1E293B),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            ),
+                          ),
+                        ),
+                        barGroups: barGroups,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -19,7 +19,7 @@ class NotificationScheduler {
 
   // --- INITIALIZATION SETTINGS ---
   static Future<void> init() async {
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('@mipmap/launcher_icon.png');
     const settings = InitializationSettings(android: android);
     await _notifications.initialize(settings: settings);
   }

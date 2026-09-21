@@ -55,4 +55,9 @@ flutter_launcher_icons:
   image_path: "assets/images/logo.jpg"
   adaptive_icon_background: "#ffffff"
   adaptive_icon_foreground: "assets/images/logo.jpg"
-  
+
+  notification_icon:
+    drawable: "ic_notification"
+    image_path: "assets/images/logo.jpg"
+
+    
