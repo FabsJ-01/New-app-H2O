@@ -34,7 +34,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String userCourse = "";
   String userYear = "";
   String userSection = "";
-  String userGender = ""; // ADDED: para makuha at maipakita ang gender
+  String userGender = "";
   String? cloudImageUrl;
   bool isLoading = true;
   bool isUploadingImage = false;
@@ -86,9 +86,6 @@ class _ProfilePageState extends State<ProfilePage> {
               userCourse = data['course']?.toString() ?? 'N/A';
               userYear = data['year']?.toString() ?? 'N/A';
               userSection = data['section']?.toString() ?? 'N/A';
-              // ADDED: kunin ang gender mula Firebase, gamit ang parehong
-              // key ('gender') na ginagamit din sa dashboard.dart para sa
-              // DOH goal calculation.
               userGender = data['gender']?.toString() ?? 'N/A';
               cloudImageUrl = data['profileImageUrl']?.toString();
             });
@@ -145,9 +142,11 @@ class _ProfilePageState extends State<ProfilePage> {
           });
 
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Profile picture updated and overwritten! 🎉"),
-              backgroundColor: Colors.green,
+            SnackBar(
+              content: const Text("Profile picture updated successfully! 🎉"),
+              backgroundColor: Colors.green.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           );
         }
@@ -162,25 +161,26 @@ class _ProfilePageState extends State<ProfilePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Failed to upload image: $e"),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
     }
   }
 
-  // IMAGE CROPPING HELPER FUNCTION
   Future<File?> _cropImage(File imageFile) async {
     CroppedFile? croppedFile = await ImageCropper().cropImage(
       sourcePath: imageFile.path,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Square Crop
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Crop Profile Picture',
           toolbarColor: Colors.blue[900],
           toolbarWidgetColor: Colors.white,
           initAspectRatio: CropAspectRatioPreset.square,
-          lockAspectRatio: true, // Naka-lock sa 1:1 ratio
+          lockAspectRatio: true,
         ),
         IOSUiSettings(
           title: 'Crop Profile Picture',
@@ -203,37 +203,47 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (pickedFile == null) return;
 
-    // 1. I-crop muna ang napiling larawan
     File? croppedFile = await _cropImage(File(pickedFile.path));
-
-    // Kung kina-cancel ng user ang pag-crop, wag ituloy ang upload
     if (croppedFile == null) return;
 
-    // 2. I-upload ang na-crop na larawan sa Cloudinary
     await _uploadDirectToCloudinary(croppedFile);
   }
 
   void _showImageSourceOptions() {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
               "Change Profile Picture",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade900,
+              ),
             ),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildSourceOption(
-                  icon: Icons.camera_alt,
+                  icon: Icons.camera_alt_rounded,
                   label: "Camera",
                   onTap: () {
                     Navigator.pop(context);
@@ -241,7 +251,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   },
                 ),
                 _buildSourceOption(
-                  icon: Icons.photo_library,
+                  icon: Icons.photo_library_rounded,
                   label: "Gallery",
                   onTap: () {
                     Navigator.pop(context);
@@ -250,7 +260,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -266,13 +276,24 @@ class _ProfilePageState extends State<ProfilePage> {
       onTap: onTap,
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: Colors.blue[50],
-            child: Icon(icon, color: Colors.blue[900], size: 28),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.blue.shade100, width: 1.5),
+            ),
+            child: Icon(icon, color: Colors.blue.shade800, size: 30),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.blue.shade900,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );
@@ -288,198 +309,354 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7FAFD),
       appBar: AppBar(
-        title: const Text("Profile"),
-        backgroundColor: Colors.blue[900],
+        title: const Text(
+          "Profile",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.blue.shade900, Colors.blue.shade700],
+            ),
+          ),
+        ),
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                children: [
-                  Center(
-                    child: Stack(
+          ? Center(
+              child: CircularProgressIndicator(color: Colors.blue.shade800),
+            )
+          : SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(20.0),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Column(
                       children: [
-                        CircleAvatar(
-                          radius: 55,
-                          backgroundColor: Colors.grey[200],
-                          child: ClipOval(
-                            child: cloudImageUrl != null && cloudImageUrl!.isNotEmpty
-                                ? Image.network(
-                                    cloudImageUrl!,
-                                    key: ValueKey(cloudImageUrl),
-                                    width: 110,
-                                    height: 110,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const Icon(
-                                        Icons.person,
-                                        size: 65,
-                                        color: Colors.grey,
-                                      );
-                                    },
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return const Center(
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      );
-                                    },
-                                  )
-                                : const Icon(
-                                    Icons.person,
-                                    size: 65,
-                                    color: Colors.grey,
+                        const SizedBox(height: 10),
+
+                        // Header Profile Card
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.shade100.withOpacity(0.4),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              // Avatar Stack with Camera Button
+                              Stack(
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.blue.shade200,
+                                        width: 3,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.blue.shade100.withOpacity(0.6),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 54,
+                                      backgroundColor: Colors.blue.shade50,
+                                      child: ClipOval(
+                                        child: cloudImageUrl != null && cloudImageUrl!.isNotEmpty
+                                            ? Image.network(
+                                                cloudImageUrl!,
+                                                key: ValueKey(cloudImageUrl),
+                                                width: 108,
+                                                height: 108,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) {
+                                                  return Icon(
+                                                    Icons.person,
+                                                    size: 65,
+                                                    color: Colors.blue.shade300,
+                                                  );
+                                                },
+                                                loadingBuilder: (context, child, loadingProgress) {
+                                                  if (loadingProgress == null) return child;
+                                                  return Center(
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2.5,
+                                                      color: Colors.blue.shade800,
+                                                    ),
+                                                  );
+                                                },
+                                              )
+                                            : Icon(
+                                                Icons.person,
+                                                size: 65,
+                                                color: Colors.blue.shade300,
+                                              ),
+                                      ),
+                                    ),
                                   ),
+                                  if (isUploadingImage)
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black45,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 3,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: GestureDetector(
+                                      onTap: isUploadingImage ? null : _showImageSourceOptions,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Colors.blue.shade900,
+                                              Colors.blue.shade600,
+                                            ],
+                                          ),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.15),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.camera_alt,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                "PSU ID: $psuId",
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "${user?.email}",
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.blue.shade200),
+                                ),
+                                child: Text(
+                                  userRole.toUpperCase(),
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        if (isUploadingImage)
-                          const Positioned.fill(
-                            child: CircleAvatar(
-                              backgroundColor: Colors.black45,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
+
+                        const SizedBox(height: 20),
+
+                        // Information Details Card
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.shade100.withOpacity(0.3),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Personal Details",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              _buildProfileInfoRow(Icons.wc_rounded, "Gender", userGender),
+
+                              if (userRole == "Student" && userCourse != "N/A") ...[
+                                const Divider(height: 24),
+                                _buildProfileInfoRow(Icons.school_rounded, "Course", userCourse),
+                                const Divider(height: 24),
+                                _buildProfileInfoRow(Icons.layers_rounded, "Year Level", userYear),
+                                const Divider(height: 24),
+                                _buildProfileInfoRow(Icons.class_rounded, "Section", userSection),
+                              ],
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // Change Password Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.blue.shade900,
+                                  Colors.blue.shade700,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.blue.shade300.withOpacity(0.4),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const ChangePasswordPage(),
+                                  ),
+                                );
+                              },
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.lock_reset_rounded, color: Colors.white, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    "Change Password",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: GestureDetector(
-                            onTap: isUploadingImage ? null : _showImageSourceOptions,
-                            child: CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Colors.blue[900],
-                              child: const Icon(
-                                Icons.camera_alt,
-                                size: 18,
-                                color: Colors.white,
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Logout Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: Colors.red.shade400, width: 1.5),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
+                              backgroundColor: Colors.red.shade50.withOpacity(0.3),
+                            ),
+                            onPressed: () async {
+                              await _auth.signOut();
+                              if (context.mounted) {
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                    builder: (context) => const LoginPage(),
+                                  ),
+                                  (Route<dynamic> route) => false,
+                                );
+                              }
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.logout_rounded, color: Colors.red.shade700, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Logout",
+                                  style: TextStyle(
+                                    color: Colors.red.shade700,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    "PSU ID: $psuId",
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "${user?.email}",
-                    style: const TextStyle(color: Colors.grey, fontSize: 14),
-                  ),
-                  const SizedBox(height: 15),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Text(
-                      userRole.toUpperCase(),
-                      style: TextStyle(
-                        color: Colors.blue[900],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  const Divider(),
-                  const SizedBox(height: 10),
-                  // ADDED: Gender row — palaging ipinapakita (hindi
-                  // kondisyonal sa Student role), dahil pangkalahatang
-                  // profile field ito, hindi student-specific tulad ng
-                  // Course/Year/Section.
-                  _buildProfileInfoRow(Icons.wc, "Gender", userGender),
-                  const SizedBox(height: 15),
-                  if (userRole == "Student" && userCourse != "N/A") ...[
-                    _buildProfileInfoRow(Icons.school, "Course", userCourse),
-                    const SizedBox(height: 15),
-                    _buildProfileInfoRow(
-                      Icons.layers,
-                      "Year Level",
-                      userYear,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildProfileInfoRow(
-                      Icons.class_,
-                      "Section",
-                      userSection,
-                    ),
-                  ],
-                  const Spacer(),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[900],
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChangePasswordPage(),
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        "Change Password",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.red[700]!),
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: () async {
-                        await _auth.signOut();
-                        if (context.mounted) {
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(
-                              builder: (context) => const LoginPage(),
-                            ),
-                            (Route<dynamic> route) => false,
-                          );
-                        }
-                      },
-                      child: Text(
-                        "Logout",
-                        style: TextStyle(
-                          color: Colors.red[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                ),
               ),
             ),
     );
@@ -487,25 +664,35 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildProfileInfoRow(IconData icon, String label, String value) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: Colors.blue[800], size: 22),
-        const SizedBox(width: 15),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: Colors.blue.shade800, size: 22),
+        ),
+        const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue.shade900,
                 ),
                 softWrap: true,
               ),
