@@ -206,67 +206,67 @@ void callbackDispatcher() {
   });
 }
 
-// --- 2. BACKGROUND SERVICE (Real-time Monitoring) ---
-@pragma('vm:entry-point')
-void onStart(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
+  // --- 2. BACKGROUND SERVICE (Real-time Monitoring) ---
+  @pragma('vm:entry-point')
+  void onStart(ServiceInstance service) async {
+    DartPluginRegistrant.ensureInitialized();
 
-  if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  }
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
 
-  if (service is AndroidServiceInstance) {
-    service.on('setAsForeground').listen(
-        (event) => service.setAsForegroundService());
-    service.on('setAsBackground').listen(
-        (event) => service.setAsBackgroundService());
-  }
+    if (service is AndroidServiceInstance) {
+      service.on('setAsForeground').listen(
+          (event) => service.setAsForegroundService());
+      service.on('setAsBackground').listen(
+          (event) => service.setAsBackgroundService());
+    }
 
-  service.on('stopService').listen((event) => service.stopSelf());
+    service.on('stopService').listen((event) => service.stopSelf());
 
-  try {
-    final ref = FirebaseDatabase.instance.ref();
-    final prefs = await SharedPreferences.getInstance();
-    final uid = prefs.getString('user_uid');
+    try {
+      final ref = FirebaseDatabase.instance.ref();
+      final prefs = await SharedPreferences.getInstance();
+      final uid = prefs.getString('user_uid');
 
-    if (uid != null) {
-      ref.child('users/$uid').onValue.listen((event) async {
-        if (event.snapshot.value == null) return;
-        final userData =
-            Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+      if (uid != null) {
+        ref.child('users/$uid').onValue.listen((event) async {
+          if (event.snapshot.value == null) return;
+          final userData =
+              Map<dynamic, dynamic>.from(event.snapshot.value as Map);
 
-        await prefs.reload();
+          await prefs.reload();
 
-        // ============================================
-        // 1. CREDITS RECEIVED NOTIFICATION
-        // ============================================
-        bool isScanning = userData['is_scanning'] == true;
-        int amount =
-            int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
+          // ============================================
+          // 1. CREDITS RECEIVED NOTIFICATION
+          // ============================================
+          bool isScanning = userData['is_scanning'] == true;
+          int amount =
+              int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
 
-        final lastNotifiedAmount =
-            prefs.getInt('last_notified_credit_amount') ?? -1;
-        final lastNotifiedScanState =
-            prefs.getBool('last_notified_scan_state') ?? false;
+          final lastNotifiedAmount =
+              prefs.getInt('last_notified_credit_amount') ?? -1;
+          final lastNotifiedScanState =
+              prefs.getBool('last_notified_scan_state') ?? false;
 
-        bool isNewCreditEvent = isScanning &&
-            amount > 0 &&
-            (amount != lastNotifiedAmount || !lastNotifiedScanState);
+          bool isNewCreditEvent = isScanning &&
+              amount > 0 &&
+              (amount != lastNotifiedAmount || !lastNotifiedScanState);
 
-        if (isNewCreditEvent) {
-          await NotificationScheduler.showInstantNotification(
-            title: "Credits Received! ✅",
-            body: "PHP $amount.00 detected. Click DISPENSE in the app.",
-          );
-          await prefs.setInt('last_notified_credit_amount', amount);
-          await prefs.setBool('last_notified_scan_state', true);
-        }
+          if (isNewCreditEvent) {
+            await NotificationScheduler.showInstantNotification(
+              title: "Credits Received! ✅",
+              body: "PHP $amount.00 detected. Click DISPENSE in the app.",
+            );
+            await prefs.setInt('last_notified_credit_amount', amount);
+            await prefs.setBool('last_notified_scan_state', true);
+          }
 
-        if (!isScanning) {
-          await prefs.setBool('last_notified_scan_state', false);
-        }
+          if (!isScanning) {
+            await prefs.setBool('last_notified_scan_state', false);
+          }
 
         // ============================================
         // 2. THANK YOU NOTIFICATION — BACKGROUND SERVICE
