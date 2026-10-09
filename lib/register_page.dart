@@ -14,8 +14,9 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final idController = TextEditingController();
   final passwordController = TextEditingController();
-  final ageController = TextEditingController();
   final sectionController = TextEditingController();
+
+  DateTime? selectedBirthdate; // Dito ise-save ang piniling birthdate
 
   String? selectedCourse;
   String? selectedYear;
@@ -36,13 +37,38 @@ class _RegisterPageState extends State<RegisterPage> {
     'Bachelor of Science in Psychology',
   ];
 
-@override
+  @override
   void dispose() {
     idController.dispose();
     passwordController.dispose();
-    ageController.dispose();
     sectionController.dispose();
     super.dispose();
+  }
+
+  // Function para mag-open ng Date Picker at kalkulahin ang edad
+  Future<void> _selectBirthdate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2005, 1, 1), // Default focus sa mga nasa college/high school age
+      firstDate: DateTime(1940), // Pinakamatandang pwede
+      lastDate: DateTime.now(), // Hanggang ngayon
+    );
+
+    if (picked != null && picked != selectedBirthdate) {
+      setState(() {
+        selectedBirthdate = picked;
+      });
+    }
+  }
+
+  // Helper para makalkula ang edad mula sa birthdate
+  int _calculateAge(DateTime birthdate) {
+    DateTime today = DateTime.now();
+    int age = today.year - birthdate.year;
+    if (today.month < birthdate.month || (today.month == birthdate.month && today.day < birthdate.day)) {
+      age--;
+    }
+    return age;
   }
 
   String? validatePassword(String value) {
@@ -53,36 +79,47 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _register() async {
     final String trimmedId = idController.text.trim();
-    final String trimmedAge = ageController.text.trim();
 
-    // 1. Basic Empty Validation check
+    // 1. Basic Empty Validation check (Isinama ang selectedBirthdate)
     if (trimmedId.isEmpty ||
-        trimmedAge.isEmpty ||
+        selectedBirthdate == null ||
         selectedGender == null ||
         selectedRole == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill out all required fields."), backgroundColor: Colors.orange),
+        const SnackBar(content: Text("Please fill out all required fields including Birthdate."), backgroundColor: Colors.orange),
       );
       return;
     }
 
-    // 2. RESTRICTION CHECK: Numbers Only Validation para sa PSU ID at Age
+    // 2. RESTRICTION CHECK: Numbers Only Validation para sa PSU ID at 1-5 restrictions
     final RegExp numericRegex = RegExp(r'^[0-9]+$');
 
     if (!numericRegex.hasMatch(trimmedId)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("PSU ID must contain numbers only (no spaces, letters, or special characters like . , / -)."),
+          content: Text("PSU ID must contain numbers only (no spaces, letters, or special characters)."),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
 
-    if (!numericRegex.hasMatch(trimmedAge)) {
+    if (RegExp(r'[1-5]').hasMatch(trimmedId)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Age must contain numbers only."),
+          content: Text("PSU ID cannot contain numbers 1 to 5."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // 3. Minimum Age Restriction Check (Dapat at least 12 years old pataas / High School allowed)
+    int calculatedAge = _calculateAge(selectedBirthdate!);
+    if (calculatedAge < 12) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Users must be at least 12 years old to register."),
           backgroundColor: Colors.orange,
         ),
       );
@@ -90,7 +127,7 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     // Student Validation
-    if (selectedRole == 'Student') {
+    if (selectedRole == 'Student') {  
       if (selectedCourse == null || selectedYear == null || sectionController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Please fill out all student profile fields."), backgroundColor: Colors.orange),
@@ -115,7 +152,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
     try {
       String psuEmail = "$trimmedId@pampangastateu.edu.ph";
-      int userAge = int.tryParse(trimmedAge) ?? 0;
+      String formattedBirthdate = DateFormat('yyyy-MM-dd').format(selectedBirthdate!);
 
       // A. Create User sa Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -130,10 +167,11 @@ class _RegisterPageState extends State<RegisterPage> {
       String yearValue = selectedRole == 'Student' ? selectedYear! : 'N/A';
       String sectionValue = selectedRole == 'Student' ? sectionController.text.trim().toUpperCase() : 'N/A';
 
-      // B. Save to Firestore
+      // B. Save to Firestore (Kasama ang birthdate para sa auto-update ng age sa dashboard)
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'psu_id': trimmedId,
-        'age': userAge,
+        'birthdate': formattedBirthdate,
+        'age': calculatedAge, // Auto-computed age
         'gender': selectedGender,
         'role': selectedRole,
         'course': courseValue,
@@ -145,7 +183,8 @@ class _RegisterPageState extends State<RegisterPage> {
       // C. Save to Realtime Database
       await FirebaseDatabase.instance.ref("users/$uid").set({
         'intake': 0,
-        'age': userAge,
+        'birthdate': formattedBirthdate,
+        'age': calculatedAge,
         'gender': selectedGender,
         'psu_id': trimmedId,
         'role': selectedRole,
@@ -191,6 +230,7 @@ class _RegisterPageState extends State<RegisterPage> {
       );
     }
   }
+
   // Helper Widget para sa Section Headers
   Widget _buildSectionHeader(String title, IconData icon) {
     return Padding(
@@ -308,11 +348,21 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // Age Field
-                    TextField(
-                      controller: ageController,
-                      keyboardType: TextInputType.number,
-                      decoration: _customInputDecoration("Age", Icons.calendar_today_outlined),
+                    // Birthdate Picker Field (Pinalitan ang manual age text field)
+                    InkWell(
+                      onTap: () => _selectBirthdate(context),
+                      child: InputDecorator(
+                        decoration: _customInputDecoration("Birthdate", Icons.calendar_today_outlined),
+                        child: Text(
+                          selectedBirthdate == null
+                              ? "Select your birthdate"
+                              : DateFormat('MMMM dd, yyyy').format(selectedBirthdate!),
+                          style: TextStyle(
+                            color: selectedBirthdate == null ? Colors.grey[600] : Colors.black87,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 15),
 
