@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 
+
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -80,7 +81,7 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _register() async {
     final String trimmedId = idController.text.trim();
 
-    // 1. Basic Empty Validation check (Isinama ang selectedBirthdate)
+    // 1. Basic Empty Validation check
     if (trimmedId.isEmpty ||
         selectedBirthdate == null ||
         selectedGender == null ||
@@ -91,7 +92,7 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    // 2. RESTRICTION CHECK: Numbers Only Validation para sa PSU ID at 1-5 restrictions
+    // 2. Numbers Only Validation para sa PSU ID at 1-5 restrictions
     final RegExp numericRegex = RegExp(r'^[0-9]+$');
 
     if (!numericRegex.hasMatch(trimmedId)) {
@@ -104,17 +105,8 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    if (RegExp(r'[1-5]').hasMatch(trimmedId)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("PSU ID cannot contain numbers 1 to 5."),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
 
-    // 3. Minimum Age Restriction Check (Dapat at least 12 years old pataas / High School allowed)
+    // 3. Minimum Age Restriction Check (At least 12 years old)
     int calculatedAge = _calculateAge(selectedBirthdate!);
     if (calculatedAge < 12) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -144,6 +136,7 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
+    // Ipakita ang loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -167,11 +160,11 @@ class _RegisterPageState extends State<RegisterPage> {
       String yearValue = selectedRole == 'Student' ? selectedYear! : 'N/A';
       String sectionValue = selectedRole == 'Student' ? sectionController.text.trim().toUpperCase() : 'N/A';
 
-      // B. Save to Firestore (Kasama ang birthdate para sa auto-update ng age sa dashboard)
+      // B. Save to Firestore
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'psu_id': trimmedId,
         'birthdate': formattedBirthdate,
-        'age': calculatedAge, // Auto-computed age
+        'age': calculatedAge,
         'gender': selectedGender,
         'role': selectedRole,
         'course': courseValue,
@@ -195,7 +188,7 @@ class _RegisterPageState extends State<RegisterPage> {
       });
 
       if (!mounted) return;
-      Navigator.pop(context); // Close Dialog
+      Navigator.pop(context); // Isara ang loading dialog
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -208,11 +201,11 @@ class _RegisterPageState extends State<RegisterPage> {
       await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
-        Navigator.pop(context); // Back to Login Screen
+        Navigator.pop(context); // Bumalik sa Login Screen
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context); // SIGURADONG ISASARA ANG LOADING KAHIT MAG-ERROR
 
       String errorMessage = "Registration failed. Please check your details.";
       if (e.code == 'email-already-in-use') errorMessage = "This PSU ID is already registered.";
@@ -223,10 +216,10 @@ class _RegisterPageState extends State<RegisterPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context); // SIGURADONG ISASARA ANG LOADING KAHIT MAY IBA PANG ERROR
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error: Check your connection or Database rules."), backgroundColor: Colors.red),
+        SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
       );
     }
   }
