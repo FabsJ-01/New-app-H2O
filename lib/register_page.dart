@@ -36,7 +36,7 @@ class _RegisterPageState extends State<RegisterPage> {
     'Bachelor of Science in Psychology',
   ];
 
-  @override
+@override
   void dispose() {
     idController.dispose();
     passwordController.dispose();
@@ -52,13 +52,39 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _register() async {
-    // 1. Validation check
-    if (idController.text.trim().isEmpty ||
-        ageController.text.trim().isEmpty ||
+    final String trimmedId = idController.text.trim();
+    final String trimmedAge = ageController.text.trim();
+
+    // 1. Basic Empty Validation check
+    if (trimmedId.isEmpty ||
+        trimmedAge.isEmpty ||
         selectedGender == null ||
         selectedRole == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill out all required fields."), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    // 2. RESTRICTION CHECK: Numbers Only Validation para sa PSU ID at Age
+    final RegExp numericRegex = RegExp(r'^[0-9]+$');
+
+    if (!numericRegex.hasMatch(trimmedId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("PSU ID must contain numbers only (no spaces, letters, or special characters like . , / -)."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (!numericRegex.hasMatch(trimmedAge)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Age must contain numbers only."),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -88,8 +114,8 @@ class _RegisterPageState extends State<RegisterPage> {
     );
 
     try {
-      String psuEmail = "${idController.text.trim()}@pampangastateu.edu.ph";
-      int userAge = int.tryParse(ageController.text.trim()) ?? 0;
+      String psuEmail = "$trimmedId@pampangastateu.edu.ph";
+      int userAge = int.tryParse(trimmedAge) ?? 0;
 
       // A. Create User sa Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -106,7 +132,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // B. Save to Firestore
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'psu_id': idController.text.trim(),
+        'psu_id': trimmedId,
         'age': userAge,
         'gender': selectedGender,
         'role': selectedRole,
@@ -121,7 +147,7 @@ class _RegisterPageState extends State<RegisterPage> {
         'intake': 0,
         'age': userAge,
         'gender': selectedGender,
-        'psu_id': idController.text.trim(),
+        'psu_id': trimmedId,
         'role': selectedRole,
         'course': courseValue,
         'year': yearValue,
@@ -165,7 +191,6 @@ class _RegisterPageState extends State<RegisterPage> {
       );
     }
   }
-
   // Helper Widget para sa Section Headers
   Widget _buildSectionHeader(String title, IconData icon) {
     return Padding(
