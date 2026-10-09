@@ -477,8 +477,8 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
         FirebaseAuth.instance.currentUser?.uid ?? localUid;
     if (currentUid != null) {
       await _dbRef.child('users/$currentUid').update({
-        'coin_trigger': true,
-        'is_dispensing': true,
+        'coin_trigger': true,//+============================
+        'is_dispensing': true,//+============================
       });
       _sendNotification(
         "Dispensing Initiated 💧",
@@ -536,8 +536,7 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
             age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
             gender = data['gender']?.toString() ?? "Male";
             dailyGoal = calculateDOHGoal(age, gender);
-            _isMachineReady = data['coin_trigger'] == false &&
-                data['is_scanning'] == true;
+            _isMachineReady = data['coin_trigger'] == true || data['is_dispensing'] == true;//+============================
           });
 
           if (!_isFirstLoad && intakeDisplay > oldIntake) {
@@ -556,7 +555,10 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
 
           bool isScanning = data['is_scanning'] == true;
           bool coinTrigger = data['coin_trigger'] == true;
-
+          
+        if (isScanning && mounted && Navigator.canPop(context)) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
           if (wasReady && !isScanning && !coinTrigger) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
