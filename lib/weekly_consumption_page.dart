@@ -33,7 +33,7 @@ class _WeeklyConsumptionPageState extends State<WeeklyConsumptionPage> {
           }
         }
 
-        // Siguraduhing valid ang selected vendo nang hindi sinisira ang state sa build logic
+        // Siguraduhing valid ang selected vendo
         final currentSelected = activeVendoList.contains(_selectedVendo) 
             ? _selectedVendo 
             : "All Units";
@@ -43,24 +43,48 @@ class _WeeklyConsumptionPageState extends State<WeeklyConsumptionPage> {
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_rounded, color: Color(0xFF1E293B), size: 20),
-              onPressed: () => Navigator.pop(context),
+            surfaceTintColor: Colors.transparent,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1.0),
+              child: Container(
+                color: const Color(0xFFE2E8F0),
+                height: 1.0,
+              ),
+            ),
+            leading: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                child: IconButton(
+                  hoverColor: const Color(0xFFF1F5F9),
+                  splashRadius: 22,
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 18),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
             ),
             title: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   "Water Consumption Analytics",
                   style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F172A),
+                    letterSpacing: -0.3,
                   ),
                 ),
+                SizedBox(height: 2),
                 Text(
                   "Volume breakdown & metrics",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF64748B),
+                  ),
                 ),
               ],
             ),
@@ -69,29 +93,53 @@ class _WeeklyConsumptionPageState extends State<WeeklyConsumptionPage> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[300]!),
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0F172A).withOpacity(0.02),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        // MAGLAGAY NG UNIQUE KEY DITO PARA HINDI MAG-CRASH ANG MOUSE TRACKER
                         key: ValueKey('vendo_dropdown_$currentSelected'),
                         value: currentSelected,
-                        icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1E293B)),
+                        borderRadius: BorderRadius.circular(12),
+                        dropdownColor: Colors.white,
+                        elevation: 3,
+                        icon: const Padding(
+                          padding: EdgeInsets.only(left: 6.0),
+                          child: Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF2563EB), size: 20),
+                        ),
                         style: const TextStyle(
                           color: Color(0xFF1E293B),
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
-                        items: activeVendoList
-                            .map((v) => DropdownMenuItem<String>(
-                                  value: v,
-                                  child: Text(v),
-                                ))
-                            .toList(),
+                        items: activeVendoList.map((v) {
+                          return DropdownMenuItem<String>(
+                            value: v,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  v == "All Units" ? Icons.tune_rounded : Icons.water_drop_rounded,
+                                  size: 15,
+                                  color: const Color(0xFF2563EB),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(v),
+                              ],
+                            ),
+                          );
+                        }).toList(),
                         onChanged: (newValue) {
                           if (newValue != null && newValue != _selectedVendo) {
                             setState(() {
@@ -106,14 +154,23 @@ class _WeeklyConsumptionPageState extends State<WeeklyConsumptionPage> {
               ),
             ],
           ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Center(
-              child: WaterConsumptionChartSection(
-                activeVendoList: activeVendoList,
-                selectedVendo: currentSelected,
-              ),
-            ),
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final bool isMobile = constraints.maxWidth < 600;
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1200),
+                    child: WaterConsumptionChartSection(
+                      activeVendoList: activeVendoList,
+                      selectedVendo: currentSelected,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         );
       },

@@ -486,7 +486,21 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
       );
     }
   }
-
+int _calculateAge(String birthdateStr) {
+    if (birthdateStr.isEmpty) return 19;
+    try {
+      DateTime birthdate = DateTime.parse(birthdateStr);
+      DateTime today = DateTime.now();
+      int age = today.year - birthdate.year;
+      if (today.month < birthdate.month || 
+          (today.month == birthdate.month && today.day < birthdate.day)) {
+        age--;
+      }
+      return age < 0 ? 0 : age;
+    } catch (e) {
+      return 19;
+    }
+  }
   double calculateDOHGoal(int age, String gender) {
     bool isMale = gender == "Male";
     if (age >= 18) return isMale ? 2900.0 : 2200.0;
@@ -525,19 +539,20 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
               Map<dynamic, dynamic>.from(event.snapshot.value as Map);
           await _checkAndResetDailyIntake(currentUid, data);
 
-          final SharedPreferences prefs =
-              await SharedPreferences.getInstance();
+          final SharedPreferences prefs = await SharedPreferences.getInstance();
           double oldIntake = intakeDisplay;
           bool wasReady = _isMachineReady;
 
-          setState(() {
-            intakeDisplay =
-                double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
-            age = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
-            gender = data['gender']?.toString() ?? "Male";
-            dailyGoal = calculateDOHGoal(age, gender);
-            _isMachineReady = data['coin_trigger'] == true || data['is_dispensing'] == true;//+============================
-          });
+          String birthdateStr = data['birthdate']?.toString() ?? "";
+          int calculatedAge = _calculateAge(birthdateStr);
+
+       setState(() {
+         intakeDisplay = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
+         age = calculatedAge > 0 ? calculatedAge : (int.tryParse(data['age']?.toString() ?? "19") ?? 19);
+         gender = data['gender']?.toString() ?? "Male";
+         dailyGoal = calculateDOHGoal(age, gender);
+         _isMachineReady = data['coin_trigger'] == true || data['is_dispensing'] == true;
+       });
 
           if (!_isFirstLoad && intakeDisplay > oldIntake) {
             if (mounted) {
@@ -553,7 +568,7 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
 
           if (_isFirstLoad) _isFirstLoad = false;
 
-          bool isScanning = data['is_scanning'] == true;
+          bool isScanning = data['is_scanning'] == true;//+============================ May mali dito
           bool coinTrigger = data['coin_trigger'] == true;
           
         if (isScanning && mounted && Navigator.canPop(context)) {

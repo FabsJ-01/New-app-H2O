@@ -1,0 +1,27 @@
+mutation SeedDatabase @transaction {
+  user_insertMany(data: [
+    { id: "00000000-0000-0000-0000-000000000001", email: "tech1@example.com", role: "Technician", firstName: "Alice", lastName: "Smith" },
+    { id: "00000000-0000-0000-0000-000000000002", email: "tech2@example.com", role: "Technician", firstName: "Bob", lastName: "Jones" },
+    { id: "00000000-0000-0000-0000-000000000003", email: "admin@example.com", role: "Admin", firstName: "Charlie", lastName: "Brown" }
+  ])
+  facility_insertMany(data: [
+    { id: "11111111-1111-1111-1111-111111111111", name: "Main Plant", locationCoordinates: "34.05, -118.25", status: "Active" },
+    { id: "11111111-1111-1111-1111-111111111112", name: "North Hub", locationCoordinates: "40.71, -74.00", status: "Maintenance" },
+    { id: "11111111-1111-1111-1111-111111111113", name: "West Station", locationCoordinates: "37.77, -122.41", status: "Active" }
+  ])
+  smartMeter_insertMany(data: [
+    { id: "22222222-2222-2222-2222-222222222221", serialNumber: "SM-001", currentReading: 150.5, status: "Connected", facilityId: "11111111-1111-1111-1111-111111111111" },
+    { id: "22222222-2222-2222-2222-222222222222", serialNumber: "SM-002", currentReading: 210.2, status: "Offline", facilityId: "11111111-1111-1111-1111-111111111112" },
+    { id: "22222222-2222-2222-2222-222222222223", serialNumber: "SM-003", currentReading: 95.8, status: "Connected", facilityId: "11111111-1111-1111-1111-111111111113" }
+  ])
+  alert_insertMany(data: [
+    { id: "33333333-3333-3333-3333-333333333331", severity: "High", type: "Power Spike", status: "Open", assignedToUserId: "00000000-0000-0000-0000-000000000001", smartMeterId: "22222222-2222-2222-2222-222222222221" },
+    { id: "33333333-3333-3333-3333-333333333332", severity: "Low", type: "Low Battery", status: "Resolved", assignedToUserId: "00000000-0000-0000-0000-000000000002", smartMeterId: "22222222-2222-2222-2222-222222222222" },
+    { id: "33333333-3333-3333-3333-333333333333", severity: "Medium", type: "Signal Loss", status: "Open", assignedToUserId: "00000000-0000-0000-0000-000000000001", smartMeterId: "22222222-2222-2222-2222-222222222223" }
+  ])
+  maintenanceTicket_insertMany(data: [
+    { id: "44444444-4444-4444-4444-444444444441", title: "Repair Power Surge", priority: "Urgent", status: "In Progress", alertId: "33333333-3333-3333-3333-333333333331", assignedTechnicianId: "00000000-0000-0000-0000-000000000001" },
+    { id: "44444444-4444-4444-4444-444444444442", title: "Replace Battery", priority: "Low", status: "Closed", alertId: "33333333-3333-3333-3333-333333333332", assignedTechnicianId: "00000000-0000-0000-0000-000000000002" },
+    { id: "44444444-4444-4444-4444-444444444443", title: "Fix Signal", priority: "Medium", status: "Open", alertId: "33333333-3333-3333-3333-333333333333", assignedTechnicianId: "00000000-0000-0000-0000-000000000001" }
+  ])
+}

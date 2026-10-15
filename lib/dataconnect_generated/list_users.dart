@@ -1,0 +1,102 @@
+part of 'generated.dart';
+
+class ListUsersVariablesBuilder {
+  
+  final FirebaseDataConnect _dataConnect;
+  ListUsersVariablesBuilder(this._dataConnect, );
+  Deserializer<ListUsersData> dataDeserializer = (dynamic json)  => ListUsersData.fromJson(jsonDecode(json));
+  
+  Future<QueryResult<ListUsersData, void>> execute({QueryFetchPolicy fetchPolicy = QueryFetchPolicy.preferCache}) {
+    return ref().execute(fetchPolicy: fetchPolicy);
+  }
+
+  QueryRef<ListUsersData, void> ref() {
+    
+    return _dataConnect.query("ListUsers", dataDeserializer, emptySerializer, null);
+  }
+}
+
+@immutable
+class ListUsersUsers {
+  final String email;
+  final String? firstName;
+  final String? lastName;
+  ListUsersUsers.fromJson(dynamic json):
+  
+  email = nativeFromJson<String>(json['email']),
+  firstName = json['firstName'] == null ? null : nativeFromJson<String>(json['firstName']),
+  lastName = json['lastName'] == null ? null : nativeFromJson<String>(json['lastName']);
+  @override
+  bool operator ==(Object other) {
+    if(identical(this, other)) {
+      return true;
+    }
+    if(other.runtimeType != runtimeType) {
+      return false;
+    }
+
+    final ListUsersUsers otherTyped = other as ListUsersUsers;
+    return email == otherTyped.email && 
+    firstName == otherTyped.firstName && 
+    lastName == otherTyped.lastName;
+    
+  }
+  @override
+  int get hashCode => Object.hashAll([email.hashCode, firstName.hashCode, lastName.hashCode]);
+  
+
+  Map<String, dynamic> toJson() {
+    Map<String, dynamic> json = {};
+    json['email'] = nativeToJson<String>(email);
+    if (firstName != null) {
+      json['firstName'] = nativeToJson<String?>(firstName);
+    }
+    if (lastName != null) {
+      json['lastName'] = nativeToJson<String?>(lastName);
+    }
+    return json;
+  }
+
+  ListUsersUsers({
+    required this.email,
+    this.firstName,
+    this.lastName,
+  });
+}
+
+@immutable
+class ListUsersData {
+  final List<ListUsersUsers> users;
+  ListUsersData.fromJson(dynamic json):
+  
+  users = (json['users'] as List<dynamic>)
+        .map((e) => ListUsersUsers.fromJson(e))
+        .toList();
+  @override
+  bool operator ==(Object other) {
+    if(identical(this, other)) {
+      return true;
+    }
+    if(other.runtimeType != runtimeType) {
+      return false;
+    }
+
+    final ListUsersData otherTyped = other as ListUsersData;
+    return users == otherTyped.users;
+    
+  }
+  @override
+  int get hashCode => users.hashCode;
+  
+
+  Map<String, dynamic> toJson() {
+    Map<String, dynamic> json = {};
+    json['users'] = users.map((e) => e.toJson()).toList();
+    return json;
+  }
+
+  ListUsersData({
+    required this.users,
+  });
+}
+

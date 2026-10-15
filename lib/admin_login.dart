@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'admin_dashboard.dart'; 
+import 'admin_dashboard.dart';
 import 'admin_register.dart';
 
 class AdminLoginPage extends StatefulWidget {
@@ -14,11 +14,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // FIX: FocusNode para ma-handle ang Enter key
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
-  
-  // Variable for password visibility toggle
+
   bool _isObscured = true;
   bool _isLoading = false;
 
@@ -31,15 +29,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
     super.dispose();
   }
 
-  // Login Function with Loading Indicator
   void _login() async {
     if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please fill in all fields."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showSnackBar("Please fill in all fields.", Colors.orange[800]!, Icons.warning_amber_rounded);
       return;
     }
 
@@ -50,20 +42,18 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      
+
       if (mounted) {
         setState(() => _isLoading = false);
-        // Redirect to Admin Dashboard upon successful login
         Navigator.pushReplacement(
-          context, 
-          MaterialPageRoute(builder: (context) => const AdminDashboard())
+          context,
+          MaterialPageRoute(builder: (context) => const AdminDashboard()),
         );
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
 
-        // FIX: Specific at friendly error messages
         String errorMessage;
         switch (e.code) {
           case 'user-not-found':
@@ -88,42 +78,14 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
             errorMessage = "Login failed. Please check your credentials.";
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Expanded(child: Text(errorMessage)),
-              ],
-            ),
-            backgroundColor: Colors.red[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        _showSnackBar(errorMessage, Colors.red[700]!, Icons.error_outline);
       }
     }
   }
 
-  // Forgot Password Function
   void _forgotPassword() async {
     if (_emailController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.white, size: 20),
-              SizedBox(width: 10),
-              Text("Please enter your email address first."),
-            ],
-          ),
-          backgroundColor: Colors.orange[700],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _showSnackBar("Please enter your email address first.", Colors.orange[800]!, Icons.info_outline);
       return;
     }
 
@@ -132,23 +94,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
         email: _emailController.text.trim(),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text("Password reset link has been sent. Please check your email."),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        _showSnackBar("Password reset link has been sent. Please check your email.", Colors.green[700]!, Icons.check_circle_outline);
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
@@ -163,29 +109,35 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
           default:
             errorMessage = "Failed to send reset link. Please try again.";
         }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Expanded(child: Text(errorMessage)),
-              ],
-            ),
-            backgroundColor: Colors.red[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        _showSnackBar(errorMessage, Colors.red[700]!, Icons.error_outline);
       }
     }
   }
 
+  void _showSnackBar(String text, Color bgColor, IconData icon) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))),
+          ],
+        ),
+        backgroundColor: bgColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    const primaryColor = Color(0xFF0288D1); // Professional Water Blue
+
     return Scaffold(
-      // Full-screen background container with image and color overlay
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -193,150 +145,229 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
           image: DecorationImage(
             image: AssetImage('assets/images/bgAdminlgn.jpg'),
             fit: BoxFit.cover,
-            // Blue tint overlay applied on top of the background image
             colorFilter: ColorFilter.mode(
-              Color.fromARGB(93, 99, 172, 255),
-              BlendMode.srcOver,
+              Color(0x990F2027), // Dark professional gradient overlay
+              BlendMode.darken,
             ),
           ),
         ),
         child: Center(
-          // Scrollable layout to prevent overflow when keyboard appears
           child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
             child: Container(
-              width: 400,
-              padding: const EdgeInsets.all(24),
+              constraints: const BoxConstraints(maxWidth: 420),
+              padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                // Slightly transparent white card
-                color: Colors.white.withOpacity(0.95),
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.5)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 15,
-                    spreadRadius: 2,
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 25,
+                    offset: const Offset(0, 10),
                   )
                 ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Page Title
-                  const Text(
-                    "H2O ADMIN LOGIN", 
-                    style: TextStyle(
-                      fontSize: 22, 
-                      fontWeight: FontWeight.bold, 
-                      color: Color.fromARGB(255, 24, 151, 255)
-                    )
+                  // App Icon Header
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.water_drop_rounded,
+                        size: 40,
+                        color: primaryColor,
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   
-                  // Email Input Field
-                  // FIX: onSubmitted — kapag pinindot Enter sa email, lilipat sa password
+                  // Title and Subtitle
+                  const Text(
+                    "H2O ADMIN",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: Color(0xFF1A237E),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Sign in to manage your system",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Email Field
                   TextField(
                     controller: _emailController,
                     focusNode: _emailFocusNode,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     onSubmitted: (_) {
-                      // Move focus to password field when Enter is pressed
                       FocusScope.of(context).requestFocus(_passwordFocusNode);
                     },
-                    decoration: const InputDecoration(
-                      labelText: "Email", 
-                      prefixIcon: Icon(Icons.email),
-                      border: OutlineInputBorder(),
-                    )
+                    decoration: InputDecoration(
+                      labelText: "Email Address",
+                      hintText: "admin@example.com",
+                      prefixIcon: const Icon(Icons.email_outlined, color: primaryColor),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: primaryColor, width: 2),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 15),
-                  
-                  // Password Input Field with Show/Hide Toggle
-                  // FIX: onSubmitted — kapag pinindot Enter sa password, mag-login agad
+                  const SizedBox(height: 18),
+
+                  // Password Field
                   TextField(
                     controller: _passwordController,
                     focusNode: _passwordFocusNode,
                     obscureText: _isObscured,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) {
-                      // Trigger login when Enter is pressed on password field
                       if (!_isLoading) _login();
                     },
                     decoration: InputDecoration(
-                      labelText: "Password", 
-                      prefixIcon: const Icon(Icons.lock),
-                      border: const OutlineInputBorder(),
+                      labelText: "Password",
+                      prefixIcon: const Icon(Icons.lock_outline, color: primaryColor),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _isObscured ? Icons.visibility_off : Icons.visibility,
+                          _isObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                          color: Colors.grey[600],
                         ),
                         onPressed: () {
-                          setState(() {
-                            // Toggle password visibility
-                            _isObscured = !_isObscured;
-                          });
+                          setState(() => _isObscured = !_isObscured);
                         },
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: primaryColor, width: 2),
                       ),
                     ),
                   ),
 
-                  // Forgot Password Link (aligned to the right)
+                  // Forgot Password Button
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: _isLoading ? null : _forgotPassword,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(50, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                       child: const Text(
                         "Forgot Password?",
-                        style: TextStyle(color: Colors.blue),
+                        style: TextStyle(
+                          color: primaryColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ),
-                  
-                  const SizedBox(height: 10),
-                  
-                  // Login Button with Loading Indicator
+                  const SizedBox(height: 20),
+
+                  // Login Button
                   SizedBox(
-                    width: double.infinity,
-                    height: 50,
+                    height: 52,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[800],
+                        backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
+                        elevation: 2,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       onPressed: _isLoading ? null : _login,
                       child: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : const Text(
-                            "LOGIN", 
-                            style: TextStyle(
-                              fontSize: 16, 
-                              fontWeight: FontWeight.bold
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2.5,
+                              ),
                             )
-                          ),
+                          : const Text(
+                              "LOGIN",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
                     ),
                   ),
-                  
-                  const SizedBox(height: 15),
-                  
-                  // Registration Navigation Link
-                  TextButton(
-                    onPressed: _isLoading ? null : () {
-                      Navigator.push(
-                        context, 
-                        MaterialPageRoute(builder: (context) => const AdminRegisterPage())
-                      );
-                    },
-                    child: const Text("Don't have an account? Register here"),
+                  const SizedBox(height: 20),
+
+                  // Register Option
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
+                        style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                      ),
+                      GestureDetector(
+                        onTap: _isLoading
+                            ? null
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const AdminRegisterPage(),
+                                  ),
+                                );
+                              },
+                        child: const Text(
+                          "Register here",
+                          style: TextStyle(
+                            color: primaryColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

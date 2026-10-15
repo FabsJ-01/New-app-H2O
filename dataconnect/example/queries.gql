@@ -1,0 +1,141 @@
+mutation CreateUser @auth(level: USER) {
+  user_insert(data: {
+    id_expr: "auth.uid",
+    email: "user@example.com",
+    role: "Member"
+  })
+}
+
+mutation UpdateUserRole($role: String!) @auth(level: USER) {
+  user_update(key: {id_expr: "auth.uid"}, data: {role: $role})
+}
+
+mutation DeleteUser @auth(level: USER) {
+  user_delete(key: {id_expr: "auth.uid"})
+}
+
+query GetCurrentUser @auth(level: USER) {
+  user(key: {id_expr: "auth.uid"}) {
+    email
+    role
+    firstName
+    lastName
+  }
+}
+
+query ListUsers @auth(level: USER) {
+  users {
+    email
+    firstName
+    lastName
+  }
+}
+
+mutation CreateFacility($name: String!, $coords: String!, $status: String!) @auth(level: PUBLIC, insecureReason: "Public facility list is required for app discovery.") {
+  facility_insert(data: {name: $name, locationCoordinates: $coords, status: $status})
+}
+
+mutation UpdateFacility($id: UUID!, $status: String!) @auth(level: PUBLIC, insecureReason: "Public facility status updates.") {
+  facility_update(key: {id: $id}, data: {status: $status})
+}
+
+mutation DeleteFacility($id: UUID!) @auth(level: PUBLIC, insecureReason: "Allow cleanup of invalid facility entries.") {
+  facility_delete(key: {id: $id})
+}
+
+query GetFacility($id: UUID!) @auth(level: PUBLIC, insecureReason: "Public facility lookup.") {
+  facility(id: $id) {
+    name
+    status
+    locationCoordinates
+  }
+}
+
+query ListFacilities @auth(level: PUBLIC, insecureReason: "Public facility directory.") {
+  facilities {
+    name
+    status
+  }
+}
+
+mutation CreateSmartMeter($serial: String!, $reading: Float!, $facilityId: UUID!) @auth(level: USER) {
+  smartMeter_insert(data: {serialNumber: $serial, currentReading: $reading, facilityId: $facilityId, status: "Active"})
+}
+
+mutation UpdateSmartMeter($id: UUID!, $reading: Float!) @auth(level: USER) {
+  smartMeter_update(key: {id: $id}, data: {currentReading: $reading})
+}
+
+mutation DeleteSmartMeter($id: UUID!) @auth(level: USER) {
+  smartMeter_delete(key: {id: $id})
+}
+
+query GetSmartMeter($id: UUID!) @auth(level: USER) {
+  smartMeter(id: $id) {
+    serialNumber
+    currentReading
+    facility { name }
+  }
+}
+
+query ListSmartMeters @auth(level: USER) {
+  smartMeters {
+    serialNumber
+    status
+  }
+}
+
+mutation CreateAlert($severity: String!, $type: String!, $meterId: UUID!) @auth(level: USER) {
+  alert_insert(data: {severity: $severity, type: $type, status: "Open", smartMeterId: $meterId, assignedToUserId_expr: "auth.uid"})
+}
+
+mutation UpdateAlert($id: UUID!, $status: String!) @auth(level: USER) {
+  alert_update(key: {id: $id}, data: {status: $status})
+}
+
+mutation DeleteAlert($id: UUID!) @auth(level: USER) {
+  alert_delete(key: {id: $id})
+}
+
+query GetAlert($id: UUID!) @auth(level: USER) {
+  alert(id: $id) {
+    severity
+    type
+    status
+  }
+}
+
+query ListMyAlerts @auth(level: USER) {
+  alerts(where: {assignedToUserId: {eq_expr: "auth.uid"}}) {
+    severity
+    type
+    status
+  }
+}
+
+mutation CreateTicket($title: String!, $alertId: UUID!) @auth(level: USER) {
+  maintenanceTicket_insert(data: {title: $title, priority: "High", status: "Open", alertId: $alertId, assignedTechnicianId_expr: "auth.uid"})
+}
+
+mutation UpdateTicket($id: UUID!, $notes: String!) @auth(level: USER) {
+  maintenanceTicket_update(key: {id: $id}, data: {technicianNotes: $notes})
+}
+
+mutation DeleteTicket($id: UUID!) @auth(level: USER) {
+  maintenanceTicket_delete(key: {id: $id})
+}
+
+query GetTicket($id: UUID!) @auth(level: USER) {
+  maintenanceTicket(id: $id) {
+    title
+    status
+    technicianNotes
+  }
+}
+
+query ListMyTickets @auth(level: USER) {
+  maintenanceTickets(where: {assignedTechnicianId: {eq_expr: "auth.uid"}}) {
+    title
+    status
+  }
+}

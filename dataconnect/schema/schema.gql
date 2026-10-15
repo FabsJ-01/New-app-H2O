@@ -1,0 +1,41 @@
+type User @table {
+  email: String!
+  role: String!
+  firstName: String
+  lastName: String
+  lastLogin: Timestamp
+}
+
+type Facility @table {
+  name: String!
+  locationCoordinates: String!
+  status: String!
+  description: String
+}
+
+type SmartMeter @table {
+  serialNumber: String!
+  currentReading: Float!
+  status: String!
+  lastSync: Timestamp
+  facility: Facility
+}
+
+type Alert @table {
+  severity: String!
+  type: String!
+  status: String!
+  resolvedAt: Timestamp
+  assignedToUser: User
+  smartMeter: SmartMeter
+}
+
+type MaintenanceTicket @table {
+  title: String!
+  priority: String!
+  status: String!
+  description: String
+  technicianNotes: String
+  alert: Alert
+  assignedTechnician: User
+}
