@@ -29,6 +29,7 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
   bool _notificationsEnabled = true;
   StreamSubscription? _userListener;
   bool _isFirstLoad = true;
+  double pendingMl = 0.0; // 👈 Idagdag ito para mamonitor ang pending water
 
   // Animation controller para sa water wave effect
   late AnimationController _waveController;
@@ -129,7 +130,29 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
     }
     _activateListeners();
   }
+// 📦 CLAIM PENDING WATER FUNCTION
+  Future<void> _claimPendingWater() async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
+    if (currentUid == null || pendingMl <= 0) return;
 
+    try {
+      await _dbRef.child('users/$currentUid').update({
+        'is_claiming': true, //ito binago
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("📦 Claiming ${pendingMl.toInt()}ml pending water! Scan at kiosk."),
+            backgroundColor: Colors.blue.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      print("Error claiming pending water: $e");
+    }
+  }
   void _showQRDialog() {
     final displayUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
     showDialog(
@@ -548,6 +571,7 @@ int _calculateAge(String birthdateStr) {
 
        setState(() {
          intakeDisplay = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
+         pendingMl = double.tryParse(data['pending_ml']?.toString() ?? "0") ?? 0.0; // 👈 Idagdag ito
          age = calculatedAge > 0 ? calculatedAge : (int.tryParse(data['age']?.toString() ?? "19") ?? 19);
          gender = data['gender']?.toString() ?? "Male";
          dailyGoal = calculateDOHGoal(age, gender);
@@ -753,7 +777,78 @@ int _calculateAge(String birthdateStr) {
                     ),
 
                     const SizedBox(height: 20),
-
+// 📦 PENDING WATER CLAIM BANNER (Lilitaw lang kapag may pending_ml)
+                    if (pendingMl > 0) ...[
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 24),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.amber.shade300, width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.amber.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.water_drop, color: Colors.amber.shade800, size: 24),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "You have pending water transactions!",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "${pendingMl.toInt()} mL pending transaction.",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: _claimPendingWater,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.amber.shade700,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                "Claim",
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     // Main circular progress card
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 24),
