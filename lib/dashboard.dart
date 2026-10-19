@@ -777,78 +777,7 @@ int _calculateAge(String birthdateStr) {
                     ),
 
                     const SizedBox(height: 20),
-// 📦 PENDING WATER CLAIM BANNER (Lilitaw lang kapag may pending_ml)
-                    if (pendingMl > 0) ...[
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 24),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.amber.shade300, width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.amber.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.shade100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(Icons.water_drop, color: Colors.amber.shade800, size: 24),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "You have pending water transactions!",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    "${pendingMl.toInt()} mL pending transaction.",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ElevatedButton(
-                              onPressed: _claimPendingWater,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.amber.shade700,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text(
-                                "Claim",
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+
                     // Main circular progress card
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -973,7 +902,81 @@ int _calculateAge(String birthdateStr) {
                     ),
 
                     const SizedBox(height: 20),
-
+                    // 📦 PENDING WATER CLAIM BANNER (COMPACT VERSION)
+                    if (pendingMl > 0) ...[
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade300, width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.amber.withOpacity(0.08),
+                              blurRadius: 6,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.water_drop, color: Colors.amber.shade800, size: 18),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Pending Water Transaction",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    "${pendingMl.toInt()} mL ready to claim",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _claimPendingWater,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.amber.shade700,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                              child: const Text(
+                                "Claim",
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     // Quick stats row
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
