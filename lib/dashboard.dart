@@ -1222,21 +1222,21 @@ const SizedBox(height: 30),                  ],
   return Container(
     key: const ValueKey("start_button"),
     width: double.infinity,
-    height: 50, // 👈 Pinaliit mula 64 patungong 50 para maging balanse
+    height: 52, // 👈 Bahagyang tinaasan para mas komportable sa daliri kapag pinindot
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(16), // 👈 Pinaliit ang radius para bumagay sa 50 height
+      borderRadius: BorderRadius.circular(16),
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color.fromARGB(255, 7, 93, 133), // Mas dark blue sa simula
-          Color(0xFF0091EA),              // Maliwanag na blue sa dulo
+          Color(0xFF00E5FF), // 👈 Maliwanag na Cyan / Neon Blue sa simula
+          Color(0xFF2979FF), // 👈 Vibrant Royal Blue sa dulo
         ],
       ),
       boxShadow: [
         BoxShadow(
-          color: const Color(0xFF0091EA).withOpacity(0.3),
-          blurRadius: 12,
+          color: const Color(0xFF00E5FF).withOpacity(0.5), // 👈 Matingkad na glow para umangat sa background
+          blurRadius: 16,
           offset: const Offset(0, 6),
         ),
       ],
@@ -1259,17 +1259,17 @@ const SizedBox(height: 30),                  ],
           children: const [
             Icon(
               Icons.water_drop,
-              size: 22, // 👈 Pinaliit ang sukat ng icon mula 28 patungong 22
+              size: 24, // 👈 Medyo pinalaki para mas kapansin-pansin
               color: Colors.white,
             ),
             SizedBox(width: 10),
             Text(
               "START DISPENSING",
               style: TextStyle(
-                fontSize: 15, // 👈 Pinaliit ang font size mula 17 patungong 15 para hindi masyadong malaki
+                fontSize: 16, // 👈 Mas binigyang-diin ang laki para madaling basahin
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
-                letterSpacing: 0.8,
+                letterSpacing: 1.0,
               ),
             ),
           ],
