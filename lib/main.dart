@@ -214,21 +214,14 @@ void callbackDispatcher() {
 
           await prefs.reload();
 
+          // 1. CREDITS RECEIVED NOTIFICATION (Inayos para mag-trigger base sa last_credits)
           // ============================================
-          // 1. CREDITS RECEIVED NOTIFICATION
-          // ============================================
-          bool isScanning = userData['is_scanning'] == true;
-          int amount =
-              int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
+          int amount = int.tryParse(userData['last_credits']?.toString() ?? "0") ?? 0;
 
-          final lastNotifiedAmount =
-              prefs.getInt('last_notified_credit_amount') ?? -1;
-          final lastNotifiedScanState =
-              prefs.getBool('last_notified_scan_state') ?? false;
+          final lastNotifiedAmount = prefs.getInt('last_notified_credit_amount') ?? -1;
 
-          bool isNewCreditEvent = isScanning &&
-              amount > 0 &&
-              (amount != lastNotifiedAmount || !lastNotifiedScanState);
+          // Mag-notif kapag may pumasok na barya (amount > 0) at naiiba ito sa huling na-notif
+          bool isNewCreditEvent = amount > 0 && amount != lastNotifiedAmount;
 
           if (isNewCreditEvent) {
             await NotificationScheduler.showInstantNotification(
@@ -236,13 +229,35 @@ void callbackDispatcher() {
               body: "PHP $amount.00 detected. Click DISPENSE in the app.",
             );
             await prefs.setInt('last_notified_credit_amount', amount);
-            await prefs.setBool('last_notified_scan_state', true);
           }
 
-          if (!isScanning) {
-            await prefs.setBool('last_notified_scan_state', false);
+          // ============================================
+          // 2. SCAN DETECTED NOTIFICATION (With Vendo Name)
+          // ============================================
+          String currentVendoName = userData['last_scanned_vendo']?.toString() ?? "H2O Hub Station";
+          bool isScanningState = userData['is_scanning'] == true;
+
+          final lastNotifiedVendo = prefs.getString('last_notified_scanned_vendo') ?? "";
+
+          // Mag-no-notif kapag kasalukuyang nag-a-scan O bago ang na-scan na vendo name
+          bool isNewScanEvent = isScanningState && currentVendoName != lastNotifiedVendo;
+
+          if (isNewScanEvent) {
+            await NotificationScheduler.showInstantNotification(
+              title: "QR Code Scanned! 📱",
+              body: "Connected to $currentVendoName. You can now insert coins or claim pending water.",
+            );
+            await prefs.setString('last_notified_scanned_vendo', currentVendoName);
           }
 
+          // Kapag natapos na ang scanning (is_scanning: false), i-reset ang tracker para sa susunod na scan
+          if (!isScanningState && lastNotifiedVendo.isNotEmpty) {
+            await prefs.setString('last_notified_scanned_vendo', "");
+          }
+          // Kapag naging 0 na ulit ang last_credits (ibig sabihin tapos na o na-reset), i-reset din natin ang tracker
+          if (amount == 0) {
+            await prefs.setInt('last_notified_credit_amount', 0);
+          }
         // ============================================
         // 2. THANK YOU NOTIFICATION — BACKGROUND SERVICE
         // Lalabas AFTER mag-dispense — hindi kapag binuksan lang ang app!
