@@ -25,12 +25,14 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
   String gender = "Male";
   int age = 19;
   bool _isMachineReady = false;
+  bool start = false; //+============================
   String? localUid;
   bool _notificationsEnabled = true;
   StreamSubscription? _userListener;
   bool _isFirstLoad = true;
   double pendingMl = 0.0; // 👈 Idagdag ito para mamonitor ang pending water
-
+  bool _isPaused = false;
+  // bool _isDispensing = false;
   // Animation controller para sa water wave effect
   late AnimationController _waveController;
   late Animation<double> _waveAnimation;
@@ -575,7 +577,10 @@ int _calculateAge(String birthdateStr) {
          age = calculatedAge > 0 ? calculatedAge : (int.tryParse(data['age']?.toString() ?? "19") ?? 19);
          gender = data['gender']?.toString() ?? "Male";
          dailyGoal = calculateDOHGoal(age, gender);
-         _isMachineReady = data['coin_trigger'] == true || data['is_dispensing'] == true;
+         _isPaused = data['is_paused'] == true;
+         _isMachineReady = data['is_dispensing'] == true;
+         start= data['coin_trigger'] == true; //+============================ 
+
        });
 
           if (!_isFirstLoad && intakeDisplay > oldIntake) {
@@ -903,10 +908,43 @@ int _calculateAge(String birthdateStr) {
 
                     const SizedBox(height: 20),
                     // 📦 PENDING WATER CLAIM BANNER (COMPACT VERSION)
+                   
+                    // Quick stats row
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        children: [
+                          _buildQuickStat(
+                            icon: Icons.local_drink_rounded,
+                            label: "Consumed",
+                            value: "${intakeDisplay.toInt()}ml",
+                            color: primaryColor,
+                          ),
+                          const SizedBox(width: 12),
+                          _buildQuickStat(
+                            icon: Icons.flag_rounded,
+                            label: "Remaining",
+                            value: "${((dailyGoal - intakeDisplay).clamp(0, dailyGoal)).toInt()}ml",
+                            color: Colors.orange.shade600,
+                          ),
+                          const SizedBox(width: 12),
+                          _buildQuickStat(
+                            icon: Icons.emoji_events_rounded,
+                            label: "Goal",
+                            value: "${dailyGoal.toInt()}ml",
+                            color: Colors.purple.shade600,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 👈 Dinagdagan natin ng spacing dito para hindi madikit sa susunod na widget
+                    const SizedBox(height: 10),
+
                     if (pendingMl > 0) ...[
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 20),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.amber.shade50,
                           borderRadius: BorderRadius.circular(12),
@@ -927,12 +965,13 @@ int _calculateAge(String birthdateStr) {
                                 color: Colors.amber.shade100,
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(Icons.water_drop, color: Colors.amber.shade800, size: 18),
+                              child: Icon(Icons.water_drop, color: Colors.amber.shade800, size: 16),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const Text(
                                     "Pending Water Transaction",
@@ -975,39 +1014,10 @@ int _calculateAge(String birthdateStr) {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                     ],
-                    // Quick stats row
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        children: [
-                          _buildQuickStat(
-                            icon: Icons.local_drink_rounded,
-                            label: "Consumed",
-                            value: "${intakeDisplay.toInt()}ml",
-                            color: primaryColor,
-                          ),
-                          const SizedBox(width: 12),
-                          _buildQuickStat(
-                            icon: Icons.flag_rounded,
-                            label: "Remaining",
-                            value:
-                                "${((dailyGoal - intakeDisplay).clamp(0, dailyGoal)).toInt()}ml",
-                            color: Colors.orange.shade600,
-                          ),
-                          const SizedBox(width: 12),
-                          _buildQuickStat(
-                            icon: Icons.emoji_events_rounded,
-                            label: "Goal",
-                            value: "${dailyGoal.toInt()}ml",
-                            color: Colors.purple.shade600,
-                          ),
-                        ],
-                      ),
-                    ),
 
-                    const SizedBox(height: 20),
+                    //const SizedBox(height: 8),
 
                     // Action buttons section
                     Padding(
@@ -1015,6 +1025,11 @@ int _calculateAge(String birthdateStr) {
                       child: Column(
                         children: [
                           // QR or Dispense button
+                          // 1. Nakahiwalay na Start Button (Lilitaw lang kapag may barya / machine ready)
+                          if (start) ...[
+                            _buildStartButton(primaryColor),
+                            const SizedBox(height: 12),
+                          ],
                           AnimatedSwitcher(
                             duration: const Duration(milliseconds: 500),
                             transitionBuilder: (child, animation) {
@@ -1024,9 +1039,9 @@ int _calculateAge(String birthdateStr) {
                                     scale: animation, child: child),
                               );
                             },
-                            child: _isMachineReady
-                                ? _buildDispenseButton(primaryColor)
-                                : _buildQRButton(),
+                            child: (_isMachineReady)
+                            ? _buildDispenseButton(primaryColor)
+                            : _buildQRButton(),
                           ),
 
                           const SizedBox(height: 12),
@@ -1059,72 +1074,76 @@ int _calculateAge(String birthdateStr) {
                     const SizedBox(height: 16),
 
                     // Notifications Toggle
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
-                              blurRadius: 15,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: SwitchListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 6),
-                          title: Text(
-                            _notificationsEnabled
-                                ? "Campus Alerts Active"
-                                : "Alerts Paused (At Home)",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: _notificationsEnabled
-                                  ? const Color(0xFF1565C0)
-                                  : Colors.grey.shade700,
-                            ),
-                          ),
-                          subtitle: Text(
-                            "Turn off if you are away from the campus hub",
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade500),
-                          ),
-                          value: _notificationsEnabled,
-                          secondary: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: _notificationsEnabled
-                                  ? LinearGradient(colors: [
-                                      primaryColor,
-                                      secondaryColor,
-                                    ])
-                                  : LinearGradient(colors: [
-                                      Colors.grey.shade400,
-                                      Colors.grey.shade300,
-                                    ]),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              _notificationsEnabled
-                                  ? Icons.notifications_active_rounded
-                                  : Icons.notifications_off_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          activeColor: primaryColor,
-                          onChanged: _toggleNotifications,
-                        ),
-                      ),
-                    ),
+                   Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 24),
+  child: Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.blue.withOpacity(0.06),
+          blurRadius: 20,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    ),
+    child: SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      title: Text(
+        _notificationsEnabled
+            ? "Hydration Reminders Active"
+            : "Reminders Paused",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+          letterSpacing: 0.3,
+          color: _notificationsEnabled
+              ? const Color(0xFF1565C0)
+              : Colors.grey.shade700,
+        ),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          "Pause daily hydration reminders.",
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade500,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ),
+      value: _notificationsEnabled,
+      secondary: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          gradient: _notificationsEnabled
+              ? LinearGradient(colors: [
+                  primaryColor,
+                  secondaryColor,
+                ])
+              : LinearGradient(colors: [
+                  Colors.grey.shade400,
+                  Colors.grey.shade300,
+                ]),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          _notificationsEnabled
+              ? Icons.notifications_active_rounded
+              : Icons.notifications_off_rounded,
+          color: Colors.white,
+          size: 20,
+        ),
+      ),
+      activeColor: primaryColor,
+      onChanged: _toggleNotifications,
+    ),
+  ),
+),
 
-                    const SizedBox(height: 30),
-                  ],
+const SizedBox(height: 30),                  ],
                 ),
               ),
             ),
@@ -1199,99 +1218,186 @@ int _calculateAge(String birthdateStr) {
   }
 
   // Dispense Water button
-  Widget _buildDispenseButton(Color primaryColor) {
-    return Column(
-      key: const ValueKey("dispense"),
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.green.shade50,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.green.shade200),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                "Machine Ready — Tap to Dispense",
-                style: TextStyle(
-                  color: Colors.green.shade700,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          height: 64,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF00B0FF),
-                Color(0xFF0091EA),
-              ],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0091EA).withOpacity(0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: _triggerWaterDispense,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedBuilder(
-                    animation: _waveAnimation,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, _waveAnimation.value * 0.5),
-                        child: const Icon(Icons.water_drop,
-                            size: 28, color: Colors.white),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    "DISPENSE WATER",
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+  Widget _buildStartButton(Color primaryColor) {
+  return Container(
+    key: const ValueKey("start_button"),
+    width: double.infinity,
+    height: 50, // 👈 Pinaliit mula 64 patungong 50 para maging balanse
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(16), // 👈 Pinaliit ang radius para bumagay sa 50 height
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.fromARGB(255, 7, 93, 133), // Mas dark blue sa simula
+          Color(0xFF0091EA),              // Maliwanag na blue sa dulo
+        ],
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFF0091EA).withOpacity(0.3),
+          blurRadius: 12,
+          offset: const Offset(0, 6),
         ),
       ],
-    );
-  }
+    ),
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () async {
+          final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
+          if (currentUid == null) return;
 
+          // 2. Gagawing true ang is_dispensing sa Firebase
+          await _dbRef.child('users/$currentUid').update({
+            'is_dispensing': true,
+          });
+        },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(
+              Icons.water_drop,
+              size: 22, // 👈 Pinaliit ang sukat ng icon mula 28 patungong 22
+              color: Colors.white,
+            ),
+            SizedBox(width: 10),
+            Text(
+              "START DISPENSING",
+              style: TextStyle(
+                fontSize: 15, // 👈 Pinaliit ang font size mula 17 patungong 15 para hindi masyadong malaki
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+ Widget _buildDispenseButton(Color primaryColor) {
+  // Alamin natin kung naka-pause ba ngayon ang dispensing
+  bool isPausedState = _isPaused;
+
+  return Column(
+    key: const ValueKey("persistent_dispense"),
+    children: [
+      // Status Indicator sa taas ng button
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isPausedState ? Colors.orange.shade50 : Colors.green.shade50,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isPausedState ? Colors.orange.shade200 : Colors.green.shade200,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: isPausedState ? Colors.orange : Colors.green,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isPausedState ? "Dispensing Paused" : "Dispensing in Progress",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isPausedState ? Colors.orange.shade800 : Colors.green.shade800,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 8),
+      
+      // Main Persistent Button (Pinaliit ang sukat)
+      Container(
+        width: double.infinity,
+        height: 50, // 👈 Pinaliit mula 64 patungong 50
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isPausedState
+                ? [Colors.orange.shade400, Colors.orange.shade700] // Kulay Orange kapag Pause
+                : [const Color(0xFF00B0FF), const Color(0xFF0091EA)], // Kulay Blue kapag Normal/Dispensing
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (isPausedState ? Colors.orange : const Color(0xFF0091EA)).withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () async {
+              final currentUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
+              if (currentUid == null) return;
+
+              if (!_isMachineReady && !_isPaused) {
+                _triggerWaterDispense();
+              } else {
+                bool nextPauseState = !_isPaused;
+                setState(() {
+                  _isPaused = nextPauseState;
+                });
+
+                await _dbRef.child('users/$currentUid').update({
+                  'is_paused': nextPauseState,
+                });
+              }
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _waveAnimation,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(0, _waveAnimation.value * 0.5), // 👈 Naayos ang multiplication syntax
+                      child: Icon(
+                        isPausedState ? Icons.play_arrow_rounded : Icons.water_drop,
+                        size: 22, // 👈 Pinaliit ang icon sukat
+                        color: Colors.white,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  isPausedState 
+                      ? "RESUME DISPENSING" 
+                      : (_isMachineReady ? "PAUSE DISPENSING" : "DISPENSE WATER"),
+                  style: const TextStyle(
+                    fontSize: 15, // 👈 Pinaliit ang font size mula 17 patungong 15
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
   // QR Code button
   Widget _buildQRButton() {
     return Container(

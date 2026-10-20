@@ -42,10 +42,6 @@ bool _isWithinActiveHours() {
   return now.hour >= 7 && now.hour < 19;
 }
 
-// FIX: bago — kinakalkula kung ilang minuto pa bago mag-7AM (kung madaling
-// araw pa) o bago mag-7AM bukas (kung lampas na 7PM). Ginagamit para
-// i-reschedule ang task papunta mismo sa susunod na active window imbes
-// na basta mamatay ang chain kapag labas ng oras.
 int _minutesUntilActiveHours() {
   final now = DateTime.now();
   if (now.hour < 7) {
@@ -72,30 +68,22 @@ double _calculateWorkmanagerDOHGoal(int age, String gender) {
 //  - disabled ang notifications habang naka-schedule na (edge case)
 //  - labas sa active hours
 //  - nag-error sa Firebase fetch
+// --- WORKMANAGER CALLBACK ---
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    int nextDelayMinutes = 17; // default fallback kung may error
+    int nextDelayMinutes = 30; // Default fallback kapag paulit-ulit na ang reminder
 
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       bool isNotifEnabled = prefs.getBool('notifications_enabled') ?? true;
 
       if (!isNotifEnabled) {
-        debugPrint("Workmanager: Notifications disabled. Not rescheduling.");
-        // FIX: i-clear din ang flag dito, para kung sakaling nagbago ang
-        // notifications_enabled nang hindi dumaan sa toggle (edge case),
-        // tama pa rin ang alam ng ensureHydrationRemindersRunning() sa
-        // susunod na pagbukas ng app.
         await prefs.setBool(kHydrationScheduledFlagKey, false);
-        // Sadyang hindi na tayo mag-re-register dito — responsibilidad na
-        // ng dashboard.dart toggle (startHydrationReminders /
-        // stopHydrationReminders) ang mag-restart nito kapag na-enable ulit.
         return Future.value(true);
       }
 
       if (!_isWithinActiveHours()) {
-        debugPrint("Workmanager: Outside active hours. Rescheduling for next window.");
         nextDelayMinutes = _minutesUntilActiveHours();
       } else {
         if (Firebase.apps.isEmpty) {
@@ -104,95 +92,83 @@ void callbackDispatcher() {
         }
 
         final String? uid = prefs.getString('user_uid');
-        if (uid == null) {
-          debugPrint("Workmanager: No UID found.");
-        } else {
+        if (uid != null) {
           final ref = FirebaseDatabase.instance.ref('users/$uid');
           final snapshot = await ref.get();
 
           if (snapshot.exists) {
             final data = Map<dynamic, dynamic>.from(snapshot.value as Map);
-            double intake =
-                double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
-            double lastSavedIntake =
-                prefs.getDouble('last_background_intake') ?? 0;
+            double intake = double.tryParse(data['intake']?.toString() ?? "0") ?? 0;
             int userAge = int.tryParse(data['age']?.toString() ?? "19") ?? 19;
             String userGender = data['gender']?.toString() ?? "Male";
-            int dailyGoal =
-                _calculateWorkmanagerDOHGoal(userAge, userGender).toInt();
+            int dailyGoal = _calculateWorkmanagerDOHGoal(userAge, userGender).toInt();
 
-            // GOAL REACHED
+            // 1. Check kung naabot na ang Goal
             if (intake >= dailyGoal) {
-              String todayKey =
-                  'congrats_sent_${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
+              String todayKey = 'congrats_sent_${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
               bool hasCongratulated = prefs.getBool(todayKey) ?? false;
               if (!hasCongratulated) {
                 await NotificationScheduler.showInstantNotification(
                   title: "Goal Reached! 🎉",
-                  body:
-                      "Congratulations! You have reached your hydration goal for today.",
+                  body: "Congratulations! You have reached your hydration goal for today.",
                 );
                 await prefs.setBool(todayKey, true);
               }
-            }
-
-            if (intake <= lastSavedIntake) {
-              nextDelayMinutes = 30;
-              if (intake < dailyGoal) {
-                int kulang = dailyGoal - intake.toInt();
-
-                // FIX: streak counter — bumibilang kung ilang beses na
-                // sunod-sunod (kada 30 min) hindi pa nag-dispense ang
-                // user. Ginagamit para pumili ng iba't ibang message
-                // sa bawat pag-ulit, imbes na paulit-ulit lang na
-                // "Student, you have Xml left" — layunin, kulitin nang
-                // mas nakaka-engganyo ang user sa halip na sanayin
-                // siyang i-ignore ang paulit-ulit na parehong text.
-                int streak = (prefs.getInt('reminder_streak_count') ?? 0) + 1;
-                await prefs.setInt('reminder_streak_count', streak);
-
-                 final List<String> reminderMessages = [
-                  "Student, you have $kulang ml left! Dispense now at the nearest H2O hub.",
-                  "Hey, you haven't dispensed yet! You still need ${kulang}ml to reach today's goal.",
-                  "Reminder: you're still ${kulang}ml short. Hydrate now before you get dehydrated!",
-                  "You've been reminded a few times now — only ${kulang}ml left. Go dispense already!",
-                  "You might have forgotten — you still need to drink ${kulang}ml today. Do it now!",
-                ];
-                // Escalate papunta sa dulo ng list habang tumataas ang
-                // streak, tapos manatili sa pinaka-persistent na
-                // message (huling entry) kung lampas na sa list length.
-                int messageIndex = (streak - 1).clamp(0, reminderMessages.length - 1);
-                String chosenMessage = reminderMessages[messageIndex];
-
-                debugPrint(
-                    "Workmanager: Sending reminder #$streak, kulang: $kulang");
-                await NotificationScheduler.showInstantNotification(
-                  title: "H2O HUB Reminder 💧",
-                  body: chosenMessage,
-                );
-              }
             } else {
-              nextDelayMinutes = 60;
-              debugPrint(
-                  "Workmanager: Intake increased, resetting interval to 60 mins.");
-              await prefs.setDouble('last_background_intake', intake);
-              // FIX: i-reset ang streak counter dahil nag-dispense na
-              // ang user — babalik sa unang (pinaka-gentle) na message
-              // sa susunod na hindi-pa-nag-dispense na round.
-              await prefs.setInt('reminder_streak_count', 0);
+              // 2. Basahin ang huling ininom o log mula sa Firebase (`last_drink_time`)
+              String lastDrinkStr = data['last_drink_time']?.toString() ?? "";
+              DateTime? lastDrinkTime = DateTime.tryParse(lastDrinkStr);
+
+              // Kung may huling inom, tingnan natin kung wala pang 1 hour (60 minutes) ang nakakalipas
+              if (lastDrinkTime != null) {
+                final differenceMinutes = DateTime.now().difference(lastDrinkTime).inMinutes;
+                
+                if (differenceMinutes < 60) {
+                  // Kung wala pang 1 hour mula nang huling uminom/mag-log, i-reschedule natin ang susunod na check 
+                  // para eksaktong matapos ang 1 hour na window!
+                  nextDelayMinutes = (60 - differenceMinutes).clamp(1, 60);
+                  debugPrint("Workmanager: Bago pa ang huling inom ($differenceMinutes mins ago). Rescheduling in $nextDelayMinutes mins.");
+                  
+                  await Workmanager().registerOneOffTask(
+                    kHydrationTaskName,
+                    kHydrationTaskName,
+                    initialDelay: Duration(minutes: nextDelayMinutes),
+                    constraints: Constraints(networkType: NetworkType.connected),
+                    existingWorkPolicy: ExistingWorkPolicy.replace,
+                  );
+                  return Future.value(true);
+                }
+              }
+
+              // Kung lumagpas na ng 60 minutes mula sa huling inom/log (o walang nakitang last_drink_time), 
+              // magpapadala na tayo ng reminder at gagawin na itong 30 mins para sa susunod.
+              int kulang = dailyGoal - intake.toInt();
+              int streak = (prefs.getInt('reminder_streak_count') ?? 0) + 1;
+              await prefs.setInt('reminder_streak_count', streak);
+
+              final List<String> reminderMessages = [
+                "Student, you have $kulang ml left! Dispense now at the nearest H2O hub.",
+                "Hey, you haven't dispensed yet! You still need ${kulang}ml to reach today's goal.",
+                "Reminder: you're still ${kulang}ml short. Hydrate now before you get dehydrated!",
+                "You might have forgotten — you still need to drink ${kulang}ml today. Do it now!",
+              ];
+
+              int messageIndex = (streak - 1).clamp(0, reminderMessages.length - 1);
+              await NotificationScheduler.showInstantNotification(
+                title: "H2O HUB Reminder 💧",
+                body: reminderMessages[messageIndex],
+              );
+
+              // Pagkalipas ng unang reminder, 30 minutes na ang susunod na agwat kung hindi pa rin nag-didispense
+              nextDelayMinutes = 30;
             }
           }
         }
       }
     } catch (e) {
       debugPrint("Workmanager Error: $e");
-      // FIX: kahit mag-error dito (hal. walang internet), hindi tayo
-      // basta-basta titigil — babagsak lang sa default 17-min retry sa ibaba.
     }
 
-    // FIX: ITO NA LANG ang tanging lugar na nagre-reschedule ng susunod
-    // na task. Walang ibang `return` sa itaas na naka-bypass dito
-    // (maliban sa disabled case, na sadyang gusto nating ihinto).
     await Workmanager().registerOneOffTask(
       kHydrationTaskName,
       kHydrationTaskName,
@@ -205,7 +181,6 @@ void callbackDispatcher() {
     return Future.value(true);
   });
 }
-
   // --- 2. BACKGROUND SERVICE (Real-time Monitoring) ---
   @pragma('vm:entry-point')
   void onStart(ServiceInstance service) async {

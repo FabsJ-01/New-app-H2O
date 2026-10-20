@@ -9,26 +9,24 @@ class ForgotPassMobilePage extends StatefulWidget {
 }
 
 class _ForgotPassMobilePageState extends State<ForgotPassMobilePage> {
-  // Binago natin ang pangalan ng controller para malinaw na ID ang kinukuha natin
   final _idController = TextEditingController();
 
   Future<void> _resetPassword() async {
-    // 1. Kuhanin ang tinype na PSU ID ng estudyante
     String psuId = _idController.text.trim();
 
     if (psuId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter your PSU ID Number."), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text("Please enter your PSU ID Number."),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
 
     try {
-      // 2. 🔥 DITO NATIN ISINAKSAK YUNG CODE, BOSS:
-      // Awtomatikong dinala sa format ng school email niyo
       String fullSchoolEmail = "$psuId@pampangastateu.edu.ph"; 
 
-      // 3. Ipadala kay Firebase gamit ang binuong school email
       await FirebaseAuth.instance.sendPasswordResetEmail(email: fullSchoolEmail);
 
       if (mounted) {
@@ -39,7 +37,6 @@ class _ForgotPassMobilePageState extends State<ForgotPassMobilePage> {
           ),
         );
         
-        // Babalik sa Login Page pagkaraan ng 2 segundo
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) Navigator.pop(context);
         });
@@ -63,60 +60,141 @@ class _ForgotPassMobilePageState extends State<ForgotPassMobilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
         title: const Text("Forgot Password"),
         backgroundColor: const Color(0xFF0D47A1),
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(25.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.mail_lock, size: 80, color: Color(0xFF0D47A1)),
-            const SizedBox(height: 15),
-            const Text(
-              "Reset your Password",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              "Enter your PSU ID Number. We will automatically send a reset link to your official school email.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 25),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+            child: Container(
+              padding: const EdgeInsets.all(24.0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.06),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon Container na may malambot na background
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D47A1).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.mail_lock_rounded, 
+                      size: 48, 
+                      color: Color(0xFF0D47A1),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  const Text(
+                    "Reset your Password",
+                    style: TextStyle(
+                      fontSize: 22, 
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  Text(
+                    "Enter your PSU ID Number. We will automatically send a reset link to your official school email.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
 
-            // DITO MAG-TITAPE NG ID NUMBER ANG ESTUDYANTE
-            TextField(
-              controller: _idController,
-              keyboardType: TextInputType.number, // Number pad para sa ID
-              decoration: const InputDecoration(
-                labelText: "PSU ID Number",
-                hintText: "e.g. 2023311060",
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.badge),
+                  // TextField para sa PSU ID
+                  TextField(
+                    controller: _idController,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    decoration: InputDecoration(
+                      labelText: "PSU ID Number",
+                      hintText: "e.g. 2023311060",
+                      labelStyle: TextStyle(color: Colors.grey.shade700),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 2),
+                      ),
+                      prefixIcon: const Icon(Icons.badge, color: Color(0xFF0D47A1)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Elegant Button gamit ang Gradient at tamang sukat
+                  Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1565C0), Color(0xFF0D47A1)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0D47A1).withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _resetPassword,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "SEND RESET LINK",
+                        style: TextStyle(
+                          color: Colors.white, 
+                          fontSize: 15, 
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 25),
-
-            // BUTTON PARA MAG-SEND
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _resetPassword, // Kapag kinlik, tatakbo yung function sa itaas
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D47A1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text(
-                  "SEND RESET LINK",
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
