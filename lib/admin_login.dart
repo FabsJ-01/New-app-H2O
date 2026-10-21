@@ -83,21 +83,40 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
     }
   }
 
-  void _forgotPassword() async {
-    if (_emailController.text.trim().isEmpty) {
-      _showSnackBar("Please enter your email address first.", Colors.orange[800]!, Icons.info_outline);
-      return;
-    }
+  // 💡 FORGOT PASSWORD METHOD NA MAY POPUP DIALOG KUNG WALANG EMAIL
+  void _forgotPassword() {
+    final emailText = _emailController.text.trim();
 
+    if (emailText.isEmpty) {
+      // Kung walang laman ang email field, magpakita ng Dialog para i-type nila
+      _showResetEmailDialog();
+    } else {
+      // Kung may laman na, direktang i-send ang reset link
+      _sendPasswordResetEmail(emailText);
+    }
+  }
+
+  void _sendPasswordResetEmail(String email) async {
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: _emailController.text.trim(),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
+
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
       if (mounted) {
-        _showSnackBar("Password reset link has been sent. Please check your email.", Colors.green[700]!, Icons.check_circle_outline);
+        Navigator.pop(context); // Close loading dialog
+        _showSnackBar(
+          "Password reset link has been sent. Please check your email.",
+          Colors.green[700]!,
+          Icons.check_circle_outline,
+        );
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
+        Navigator.pop(context); // Close loading dialog
         String errorMessage;
         switch (e.code) {
           case 'user-not-found':
@@ -112,6 +131,62 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
         _showSnackBar(errorMessage, Colors.red[700]!, Icons.error_outline);
       }
     }
+  }
+
+  void _showResetEmailDialog() {
+    final TextEditingController resetEmailController = TextEditingController();
+    const primaryColor = Color(0xFF0288D1);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Reset Password", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Please enter your registered email address to receive a password reset link.",
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: resetEmailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: "Email Address",
+                hintText: "admin@example.com",
+                prefixIcon: const Icon(Icons.email_outlined, color: primaryColor),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              final email = resetEmailController.text.trim();
+              if (email.isNotEmpty) {
+                Navigator.pop(context); // Close dialog
+                _sendPasswordResetEmail(email);
+              } else {
+                _showSnackBar("Please enter an email address.", Colors.orange[800]!, Icons.warning_amber_rounded);
+              }
+            },
+            child: const Text("Send Link"),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnackBar(String text, Color bgColor, IconData icon) {
