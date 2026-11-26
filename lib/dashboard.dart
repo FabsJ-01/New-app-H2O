@@ -83,25 +83,30 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
   }
 
   Future<void> _loadOfflineData() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final user = FirebaseAuth.instance.currentUser;
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  final user = FirebaseAuth.instance.currentUser;
 
-    if (user != null) {
-      await prefs.setString('user_uid', user.uid);
-    }
-
-    setState(() {
-      intakeDisplay = prefs.getDouble('last_intake') ?? 0.0;
-      localUid = prefs.getString('user_uid') ?? user?.uid;
-      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-    });
-
-    if (_notificationsEnabled) {
-      await ensureHydrationRemindersRunning();
-    } else {
-      await stopHydrationReminders();
-    }
+  if (user != null && user.uid.isNotEmpty) {
+    await prefs.setString('user_uid', user.uid);
   }
+
+  final savedUid = prefs.getString('user_uid');
+  final resolvedUid = (savedUid != null && savedUid.isNotEmpty)
+      ? savedUid
+      : ((user?.uid.isNotEmpty ?? false) ? user!.uid : null);
+
+  setState(() {
+    intakeDisplay = prefs.getDouble('last_intake') ?? 0.0;
+    localUid = resolvedUid;
+    _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
+  });
+
+  if (_notificationsEnabled) {
+    await ensureHydrationRemindersRunning();
+  } else {
+    await stopHydrationReminders();
+  }
+}
 
   Future<void> _toggleNotifications(bool value) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -155,25 +160,45 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
       print("Error claiming pending water: $e");
     }
   }
+
   void _showQRDialog() {
-    final displayUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "Your Personal QR",
-          textAlign: TextAlign.center,
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
+  final rawUid = FirebaseAuth.instance.currentUser?.uid ?? localUid;
+  final hasValidUid = rawUid != null && rawUid.trim().isNotEmpty;
+  final qrData = hasValidUid ? rawUid.trim() : "No UID Saved";
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text(
+        "Your Personal QR",
+        textAlign: TextAlign.center,
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      content: SizedBox(
+        width: 240,
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            QrImageView(
-              data: displayUid ?? "No UID Saved",
-              version: QrVersions.auto,
-              size: 200.0,
-            ),
+            if (hasValidUid)
+              Container(
+                padding: const EdgeInsets.all(8),
+                color: Colors.white,
+                child: QrImageView(
+                  data: qrData,
+                  version: QrVersions.auto,
+                  size: 200.0,
+                  backgroundColor: Colors.white,
+                ),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  "No UID Saved yet. Please sign in again.",
+                  textAlign: TextAlign.center,
+                ),
+              ),
             const SizedBox(height: 10),
             const Text(
               "Scan at the PSU H2O Hub",
@@ -181,264 +206,282 @@ class _DashboardState extends State<Dashboard> with TickerProviderStateMixin {
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CLOSE"),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("CLOSE"),
+        ),
+      ],
+    ),
+  );
+}
+
+  void _showLogWaterDialog() {
+  final TextEditingController customController = TextEditingController();
+  int? selectedMl;
+  bool isCustom = false;
+
+  final presets = [
+    {'label': '250ml', 'value': 250, 'icon': '🥤'},
+    {'label': '500ml', 'value': 500, 'icon': '🍶'},
+    {'label': '750ml', 'value': 750, 'icon': '🫗'},
+    {'label': '1000ml', 'value': 1000, 'icon': '🧴'},
+  ];
+
+  Widget buildPresetTile(
+    Map<String, dynamic> preset,
+    void Function(void Function()) setDialogState,
+  ) {
+    final bool isSelected = selectedMl == preset['value'] && !isCustom;
+    return GestureDetector(
+      onTap: () {
+        setDialogState(() {
+          selectedMl = preset['value'] as int;
+          isCustom = false;
+          customController.clear();
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue.shade700 : Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.blue.shade700 : Colors.blue.shade100,
+            width: 1.5,
           ),
-        ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              preset['icon'] as String,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              preset['label'] as String,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: isSelected ? Colors.white : Colors.blue.shade800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _showLogWaterDialog() {
-    final TextEditingController customController = TextEditingController();
-    int? selectedMl;
-    bool isCustom = false;
-
-    final List<Map<String, dynamic>> presets = [
-      {'label': '250ml', 'value': 250, 'icon': '🥤'},
-      {'label': '500ml', 'value': 500, 'icon': '🍶'},
-      {'label': '750ml', 'value': 750, 'icon': '🫗'},
-      {'label': '1000ml', 'value': 1000, 'icon': '🧴'},
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: Column(
+  showDialog(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.water_drop_rounded,
+                  color: Colors.blue.shade700,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "Log Water Intake",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Colors.blue.shade900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Away from campus? Log manually!",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.water_drop_rounded,
-                    color: Colors.blue.shade700,
-                    size: 32,
+                Text(
+                  "Quick Select:",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
                   ),
                 ),
                 const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: buildPresetTile(presets[0], setDialogState)),
+                    const SizedBox(width: 10),
+                    Expanded(child: buildPresetTile(presets[1], setDialogState)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: buildPresetTile(presets[2], setDialogState)),
+                    const SizedBox(width: 10),
+                    Expanded(child: buildPresetTile(presets[3], setDialogState)),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 Text(
-                  "Log Water Intake",
-                  textAlign: TextAlign.center,
+                  "Or enter custom amount:",
                   style: TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: Colors.blue.shade900,
+                    color: Colors.grey.shade700,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  "Away from campus? Log manually!",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                    fontWeight: FontWeight.normal,
+                const SizedBox(height: 8),
+                TextField(
+                  controller: customController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (val) {
+                    setDialogState(() {
+                      isCustom = val.isNotEmpty;
+                      if (isCustom) selectedMl = null;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: "e.g. 350",
+                    suffixText: "ml",
+                    suffixStyle: TextStyle(
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.blue.shade200),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.blue.shade700,
+                        width: 2,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: Colors.blue.shade50,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "Current: ${intakeDisplay.toInt()}ml / ${dailyGoal.toInt()}ml",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Quick Select:",
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  GridView.count(
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 2.2,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: presets.map((preset) {
-                      bool isSelected =
-                          selectedMl == preset['value'] && !isCustom;
-                      return GestureDetector(
-                        onTap: () {
-                          setDialogState(() {
-                            selectedMl = preset['value'];
-                            isCustom = false;
-                            customController.clear();
-                          });
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.blue.shade700
-                                : Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected
-                                  ? Colors.blue.shade700
-                                  : Colors.blue.shade100,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  preset['icon'],
-                                  style: const TextStyle(fontSize: 16),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  preset['label'],
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.blue.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Or enter custom amount:",
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: customController,
-                    keyboardType: TextInputType.number,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        isCustom = val.isNotEmpty;
-                        if (isCustom) selectedMl = null;
-                      });
-                    },
-                    decoration: InputDecoration(
-                      hintText: "e.g. 350",
-                      suffixText: "ml",
-                      suffixStyle: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.blue.shade200),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Colors.blue.shade700,
-                          width: 2,
-                        ),
-                      ),
-                      filled: true,
-                      fillColor: Colors.blue.shade50,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            size: 14, color: Colors.grey.shade500),
-                        const SizedBox(width: 6),
-                        Text(
-                          "Current: ${intakeDisplay.toInt()}ml / ${dailyGoal.toInt()}ml",
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                "Cancel",
+                style: TextStyle(color: Colors.grey.shade600),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text("Cancel",
-                    style: TextStyle(color: Colors.grey.shade600)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade700,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 12),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                onPressed: () async {
-                  int mlToAdd = 0;
-                  if (isCustom && customController.text.isNotEmpty) {
-                    mlToAdd =
-                        int.tryParse(customController.text.trim()) ?? 0;
-                  } else if (selectedMl != null) {
-                    mlToAdd = selectedMl!;
-                  }
-                  if (mlToAdd <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content:
-                            Text("Please select or enter a valid amount!"),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-                    return;
-                  }
-                  if (mlToAdd > 2000) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Maximum single log is 2000ml!"),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-                    return;
-                  }
-                  Navigator.pop(context);
-                  await _saveManualIntake(mlToAdd);
-                },
-                child: const Text("SAVE",
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
               ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+              onPressed: () async {
+                int mlToAdd = 0;
+                if (isCustom && customController.text.isNotEmpty) {
+                  mlToAdd = int.tryParse(customController.text.trim()) ?? 0;
+                } else if (selectedMl != null) {
+                  mlToAdd = selectedMl!;
+                }
+                if (mlToAdd <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Please select or enter a valid amount!"),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+                if (mlToAdd > 2000) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Maximum single log is 2000ml!"),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                await _saveManualIntake(mlToAdd);
+              },
+              child: const Text(
+                "SAVE",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  ).then((_) => customController.dispose());
+}
 
   Future<void> _saveManualIntake(int mlToAdd) async {
     final currentUid =

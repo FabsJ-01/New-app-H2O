@@ -365,38 +365,51 @@ class _OverviewPageState extends State<OverviewPage> {
           Padding(
             padding: const EdgeInsets.all(25),
             child: Column(
+              
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () => _showEditNameDialog(id, name),
-                              child: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                            ),
-                          ],
-                        ),
-                        Text("ID: $id", style: const TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        _statusBadge(isOnline, status),
-                        const SizedBox(width: 10),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: () => _showDeleteDialog(id, name),
-                        ),
-                      ],
-                    ),
-                  ],
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+    // Pinalagyan natin ng Expanded para mag-adjust ang text kung mahaba man
+    Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  name,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis, // Para mag-ellipsis (...) kung sobrang haba
                 ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _showEditNameDialog(id, name),
+                child: const Icon(Icons.edit, size: 18, color: Colors.blue),
+              ),
+            ],
+          ),
+          Text("ID: $id", style: const TextStyle(color: Colors.grey)),
+        ],
+      ),
+    ),
+    const SizedBox(width: 8),
+    // Status Badge at Delete Button sa kanan na hindi na maiipit
+    Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _statusBadge(isOnline, status),
+        const SizedBox(width: 10),
+        IconButton(
+          icon: const Icon(Icons.delete_outline, color: Colors.red),
+          onPressed: () => _showDeleteDialog(id, name),
+        ),
+      ],
+    ),
+  ],
+),
                 const Divider(height: 40),
                 _buildPricingConfig(id, mlPerPeso, data),
                 const SizedBox(height: 20),
@@ -511,7 +524,8 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
-  Widget _buildPricingConfig(String id, int mlPerPeso, Map<dynamic, dynamic> vendoData) {
+ // --- VENDO CARD BUILDER (PRICING CONFIG) ---
+ Widget _buildPricingConfig(String id, int mlPerPeso, Map<dynamic, dynamic> vendoData) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
@@ -521,43 +535,53 @@ class _OverviewPageState extends State<OverviewPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text("Dispense Calibration", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-          Flexible(
+          // Pinalagyan natin ng Expanded para may sarili siyang space at hindi maipit ang kabilang side
+          const Expanded(
+            flex: 4,
+            child: Text(
+              "Dispense Calibration",
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 5),
+          // Controls sa kanan (Minus, Value/Volume, Plus)
+          Expanded(
+            flex: 5,
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.remove_circle_outline, color: Colors.orange),
+                  icon: const Icon(Icons.remove_circle_outline, color: Colors.orange, size: 20),
                   onPressed: () {
                     if (mlPerPeso > 1) {
                       _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso - 1);
                     }
                   },
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
+                // Tinanggal na natin ang FittedBox para hindi na lumiit ang font, ginamit na lang natin ay Flexible na may ellipsis kung sakali
                 Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      "Volume: $mlPerPeso / ₱1",
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
+                  child: Text(
+                    "$mlPerPeso ml/₱1",
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.orange),
+                  icon: const Icon(Icons.add_circle_outline, color: Colors.orange, size: 20),
                   onPressed: () {
                     if (mlPerPeso < 1000) {
                       _dbRef.child('vendos/$id/settings/ml_per_peso').set(mlPerPeso + 1);
                     }
                   },
                 ),
-                const SizedBox(width: 15),
               ],
             ),
           ),
